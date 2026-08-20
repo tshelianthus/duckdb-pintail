@@ -1,6 +1,9 @@
 # API Contract Specification (v0.1.0 MVP)
 
-All functions reside in DuckDB's default catalog upon `LOAD pintail;`.
+All functions are registered into DuckDB's default catalog upon `LOAD pintail;`.
+This contract is **language-agnostic**: the SQL surface below is identical regardless of
+the C++ (current) implementation language. Do not invent names, parameters, or return
+types not listed here.
 
 ---
 
@@ -9,29 +12,65 @@ All functions reside in DuckDB's default catalog upon `LOAD pintail;`.
   - `st_geohash(lat DOUBLE, lon DOUBLE, precision INTEGER) -> VARCHAR`
   - `st_geohash(lat DOUBLE, lon DOUBLE) -> VARCHAR` (Default precision = 12)
 - **Behavior**:
-  - Encodes `(lat, lon)` into a standard Geohash Base32 string.
-  - Latitude valid range: `[-90.0, 90.0]`. Out of bounds throws `Invalid Input Error`.
-  - Longitude valid range: `[-180.0, 180.0]`. Out of bounds throws `Invalid Input Error`.
-  - Precision valid range: `[1, 12]`. Default is 12.
+  - Encodes `(lat, lon)` into a standard Geohash Base32 string (`0123456789bcdefghjkmnpqrstuvwxyz`).
+  - Latitude valid range: `[-90.0, 90.0]`. Out of bounds raises `Invalid Input Error`.
+  - Longitude valid range: `[-180.0, 180.0]`. Out of bounds raises `Invalid Input Error`.
+  - Precision valid range: `[1, 20]` (standard Geohash maximum). Default is 12.
 
 ---
 
 ### 2. `st_pointfromgeohash`
 - **Signature**: `st_pointfromgeohash(hash VARCHAR) -> STRUCT(lat DOUBLE, lon DOUBLE)`
 - **Behavior**:
-  - Decodes a Geohash string and returns the center coordinate struct `{lat: DOUBLE, lon: DOUBLE}`.
-  - Invalid Base32 characters throw `Invalid Input Error`.
+  - Decodes a Geohash string to the center coordinate struct `{lat: DOUBLE, lon: DOUBLE}`.
+  - Invalid Base32 characters raise `Invalid Input Error`.
 
 ---
 
 ### 3. `st_geohash_bbox`
 - **Signature**: `st_geohash_bbox(hash VARCHAR) -> STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)`
 - **Behavior**:
-  - Decodes a Geohash string and returns its bounding box boundaries.
+  - Decodes a Geohash string and returns its bounding-box boundaries.
 
 ---
 
 ### 4. `st_geohash_neighbors`
 - **Signature**: `st_geohash_neighbors(hash VARCHAR) -> VARCHAR[]`
 - **Behavior**:
-  - Returns a LIST of 8 adjacent Geohash cells at the same resolution: `[N, NE, E, SE, S, SW, W, NW]`.
+  - Returns a `LIST` of 8 adjacent Geohash cells at the same resolution, ordered `[N, NE, E, SE, S, SW, W, NW]`.
+  - Invalid Base32 characters raise `Invalid Input Error`.
+
+---
+
+### Semantics shared by all functions
+- **NULL propagation**: any `NULL` input ⇒ `NULL` output (standard SQL 3-valued logic).
+- **Error style**: invalid inputs raise DuckDB query errors (`Invalid Input Error` / Out-of-range), never crash the process.
+- **Determinism**: all functions are deterministic and side-effect free.
+
+---
+
+## Axis-Order Convention (`always_xy`) — reserved for Tier 1
+
+### Purpose
+`always_xy` is an **optional** `BOOLEAN` parameter that explicitly declares the coordinate-axis
+order of input geometries. It is a reserved cross-cutting convention for the Tier-1 geometry / CRS
+surface (`GEOMETRY`-typed functions such as coordinate transforms and WKT/GeoJSON (de)serialization);
+it is **not** applicable to the Tier-0 grid functions above, whose `lat`/`lon` arguments are already
+explicitly named and therefore axis-order unambiguous.
+
+### Contract
+- **Signature form** (future functions may add this trailing optional argument):
+  `some_func(geom …, always_xy BOOLEAN)` with default `always_xy = false`.
+- **`always_xy = TRUE`**: treat all input coordinates as `(longitude, latitude)` order, i.e.
+  `(x, y)` / `(lon, lat)` order.
+- **`always_xy = FALSE`** (default): follow the axis order defined by the coordinate reference
+  system (CRS), e.g. EPSG:4326 defaults to latitude-first, consistent with the OGC Simple Features
+  / ISO 19125 standard.
+- **Design intent**: maximize interoperability with `(lon, lat)`-native systems (e.g. PostGIS,
+  GeoJSON) without breaking the standards-first principle at the core of the DuckDB Spatial
+  extension.
+
+### Non-goals (Tier 0)
+- The four grid functions (`st_geohash`, `st_pointfromgeohash`, `st_geohash_bbox`,
+  `st_geohash_neighbors`) do **not** accept `always_xy`; adding it there would be semantically
+  redundant and disruptive. Apply it only when Tier 1 introduces CRS-aware `GEOMETRY` functions.
