@@ -1,9 +1,9 @@
 # Tasks & Execution Roadmap
 
 - [ ] **Phase 0: Scaffolding**
-  - [ ] Initialize repository with `extension-template-rs`
-  - [ ] Rename extension target to `pintail`
-  - [ ] Verify local `make debug` and `duckdb -unsigned` load
+  - [x] Initialize repository with `extension-template-rs`
+  - [x] Rename extension target to `pintail`
+  - [x] Verify local `make debug` and `duckdb -unsigned` load
 
 ### Standing Rule (from Phase 0 onward)
 - [ ] Every commit keeps `make debug` + local `LOAD` green

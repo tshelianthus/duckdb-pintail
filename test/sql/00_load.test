@@ -1,0 +1,5 @@
+# name: test/sql/00_load.test
+# description: Verify pintail extension loads successfully
+# group: [pintail]
+
+require pintail

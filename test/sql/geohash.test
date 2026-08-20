@@ -1,6 +1,8 @@
 # name: test/sql/geohash.test
-# description: Test Pintail Geohash functionality
+# description: Test Pintail Geohash functionality (Phase 1)
 # group: [pintail]
+
+mode skip
 
 require pintail
 

@@ -19,4 +19,5 @@ You are an expert systems engineer and spatial database specialist working on `d
 - Build Debug: `make debug`
 - Build Release: `make release`
 - Run SQL Tests: `make test_debug`
-- Test with CLI: `duckdb -unsigned` -> `LOAD './build/debug/extension/pintail/pintail.duckdb_extension';`
+- Test with CLI: `duckdb -unsigned` (CLI version must match `TARGET_DUCKDB_VERSION`, currently **v1.5.5**) -> `LOAD './build/debug/extension/pintail/pintail.duckdb_extension';`
+- Load smoke in CI/local: `make test_debug` (runs `test/sql/00_load.test`)
