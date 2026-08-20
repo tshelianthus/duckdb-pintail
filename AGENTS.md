@@ -4,6 +4,7 @@ You are an expert systems engineer and spatial database specialist working on `d
 
 ## 1. Core Principles & SSD Rules
 - **Strict Spec Adherence**: Always read `.specs/` before writing code. Never invent SQL function names, parameters, or return types not defined in `.specs/03_API_CONTRACT.md`.
+- **Loadable Every Commit**: After Phase 0 scaffolding lands, every commit that touches build/entry/registration code MUST produce an artifact that loads successfully in local DuckDB (`duckdb -unsigned`), even if no SQL functions are implemented yet. Prefer a correct empty registration entrypoint over unfinished feature code. Community publish (`INSTALL … FROM community`) is NOT required for this gate.
 - **Vectorized First**: All functions must operate on DuckDB Vectors/DataChunks. Never process rows via slow scalar iteration if batch vectorization is available.
 - **Zero Panic / Zero Crash**: Database extensions must never panic or segfault. Always handle errors gracefully and return DuckDB errors.
 - **TDD Workflow**: For every function implemented, write the corresponding `.test` (SQLLogicTest) file first or simultaneously.
