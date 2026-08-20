@@ -7,22 +7,27 @@ All test cases are written in standard SQLLogicTest format under `test/sql/`.
 Applies to every commit on `dev`/`main` after scaffolding is complete.
 Feature completeness is irrelevant; the load path must stay green.
 
-**Pass criteria**
-1. `make debug` succeeds and emits
+**Automatic verification (authoritative)**
+1. `make configure` succeeds (sets up a DuckDB-pinned venv).
+2. `make debug` succeeds and emits
    `build/debug/extension/pintail/pintail.duckdb_extension`
-2. In `duckdb -unsigned`, the following succeeds without error:
-   ```sql
-   LOAD './build/debug/extension/pintail/pintail.duckdb_extension';
-   ```
-3. Extension identity is correct: name `pintail` (no hyphens); no segfault / panic on load.
+3. `make test_debug` succeeds (includes `test/sql/00_load.test` which only validates `require pintail` / loadability).
+
+**Manual verification (optional for developers)**
+If your local `duckdb` CLI version matches the target (v1.5.5), then the following should also succeed:
+```sql
+LOAD './build/debug/extension/pintail/pintail.duckdb_extension';
+```
+
+Extension identity is correct: name `pintail` (no hyphens); no segfault / panic on load.
 
 **Out of scope for this gate**
 - `INSTALL pintail FROM community;` (Phase 2 only)
 - Any `st_*` function behavior (covered by the operator matrix below)
 
 **Minimal regression test**
-Keep a SQLLogicTest (e.g. `test/sql/00_load.test`) that only `require pintail` / loads the
-extension, so `make test_debug` fails if the entrypoint breaks.
+Keep a SQLLogicTest (e.g. `test/sql/00_load.test`) that only `require pintail` / loads the extension,
+so `make test_debug` fails if the entrypoint breaks.
 
 ### Mandatory Test Matrix for Each Operator:
 1. **Happy Path**: Standard coordinates (e.g., Shanghai: `31.2304, 121.4737` -> `wtw3sj`).

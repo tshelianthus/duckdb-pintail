@@ -6,7 +6,7 @@
   - [x] Verify local `make debug` and `duckdb -unsigned` load
 
 ### Standing Rule (from Phase 0 onward)
-- [ ] Every commit keeps `make debug` + local `LOAD` green
+- [ ] Every commit keeps `make configure` + `make debug` + `make test_debug` green
 - [ ] Empty / partial feature sets are OK; a broken load entrypoint is not
 
 - [ ] **Phase 1: Geohash Core (MVP)**
