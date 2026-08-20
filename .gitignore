@@ -12,4 +12,5 @@ CMakeCache.txt
 CMakeFiles
 cmake_install.cmake
 .venv/
-duckdb.tar.gz
+duckdb*.tar.gz
+.cache/
