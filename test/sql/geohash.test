@@ -1,0 +1,34 @@
+# name: test/sql/geohash.test
+# description: Test Pintail Geohash functionality
+# group: [pintail]
+
+require pintail
+
+# Test simple encoding
+query T
+SELECT st_geohash(31.2304, 121.4737, 6);
+----
+wtw3sj
+
+# Test default precision (12)
+query T
+SELECT length(st_geohash(31.2304, 121.4737));
+----
+12
+
+# Test decoding to struct
+query I
+SELECT st_pointfromgeohash('wtw3sj');
+----
+{'lat': 31.23138427734375, 'lon': 121.47308349609375}
+
+# Test NULL propagation
+query T
+SELECT st_geohash(NULL, 121.4737, 6);
+----
+NULL
+
+query T
+SELECT st_geohash(31.2304, NULL, 6);
+----
+NULL
