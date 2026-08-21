@@ -299,15 +299,15 @@ LOAD pintail;
 - [x] `make test_debug` 通过。
 - [x] `make release` 通过。
 - [x] `make test_release` 通过。
-- [ ] GitHub Actions 跨平台矩阵全部通过。
-- [ ] `dev` 已通过 PR 合并到 `main`。
+- [x] GitHub Actions 跨平台矩阵全部通过（https://github.com/tshelianthus/duckdb-pintail/actions/runs/32467871438）。
+- [ ] `dev` 已通过 PR 合并到 `main`（`main` 受保护，待创建并合并 PR）。
 - [x] README 与实际功能一致。
 - [x] README 许可证描述与 LICENSE 一致。
 - [x] 项目路线图状态已更新。
-- [ ] 已创建 `v0.1.0` tag。
-- [ ] 已记录 tag 对应的完整 commit SHA。
-- [x] 已创建 `docs/community/description.yml`（提交社区仓库前将 `ref` 替换为 tag SHA）。
-- [ ] `description.yml` 中的版本、许可证、维护者和 Git ref 正确（`ref` 待 tag）。
+- [x] 已创建 `v0.1.0` tag。
+- [x] 已记录 tag 对应的完整 commit SHA：`ef5644d2450bcdf269482292e5ab78b7b24dccb3`。
+- [x] 已创建 `docs/community/description.yml`（`ref` 已替换为 `v0.1.0` SHA）。
+- [x] `description.yml` 中的版本、许可证、维护者和 Git ref 正确。
 - [ ] 已向 `duckdb/community-extensions` 提交 PR。
 - [ ] Community CI 全部通过。
 - [ ] Community PR 已获维护者批准。

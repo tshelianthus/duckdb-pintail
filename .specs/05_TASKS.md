@@ -19,8 +19,10 @@
 
 ## [ ] Phase 2: Community Submission
 - [x] Create `docs/community/description.yml` (submit to `duckdb/community-extensions` after `v0.1.0` is tagged).
-- [ ] Verify the GitHub Actions cross-compilation matrix.
-- [ ] Merge `dev` to `main`, tag `v0.1.0`, and open the community-extensions PR.
+- [x] Verify the GitHub Actions cross-compilation matrix.
+- [x] Tag `v0.1.0` at `ef5644d2450bcdf269482292e5ab78b7b24dccb3`.
+- [ ] Merge `dev` to `main` via PR (`main` is protected).
+- [ ] Open the community-extensions PR.
 
 ## [x] Phase 2A: Native Geohash GEOMETRY (DuckDB Core)
 - [x] Update the API contract for the breaking `st_pointfromgeohash` return-type change.
