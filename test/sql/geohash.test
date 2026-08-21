@@ -45,44 +45,61 @@ SELECT length(st_geohash(31.2304, 121.4737));
 ----
 12
 
+# Precision bounds: 1 and 20 (contract maximum).
+query T
+SELECT st_geohash(31.2304, 121.4737, 1);
+----
+w
+
+query T
+SELECT st_geohash(31.2304, 121.4737, 20);
+----
+wtw3sjq6q2e8w3g6k9zu
+
 # 7. Boundary: equator + prime meridian (0, 0) → 's0000'
 query T
 SELECT st_geohash(0.0, 0.0, 5);
 ----
 s0000
 
-# Contract boundaries are inclusive.
+# Contract boundaries are inclusive: poles, ±antimeridian, and corners.
 query TTTT
 SELECT st_geohash(90.0, 0.0, 5), st_geohash(-90.0, 0.0, 5),
        st_geohash(0.0, 180.0, 5), st_geohash(0.0, -180.0, 5);
 ----
 upbpb	h0000	xbpbp	80000
 
+query TTT
+SELECT st_geohash(90.0, 180.0, 5), st_geohash(-90.0, -180.0, 5), st_geohash(-90.0, 180.0, 5);
+----
+zzzzz	00000	pbpbp
+
+# Flat (non-constant) input vectors for encoding.
+query T
+SELECT st_geohash(lat, lon, 5)
+FROM (VALUES (0.0, 0.0), (90.0, 0.0), (-90.0, 0.0), (0.0, 180.0), (0.0, -180.0)) t(lat, lon);
+----
+s0000
+upbpb
+h0000
+xbpbp
+80000
+
 # =============================================================================
 # st_pointfromgeohash — decoding (center point)
 # =============================================================================
 
 # 8. First 20 characters of the PostGIS official vector (the contract maximum).
-query R
-SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'), 'lat'), 6);
+query T
+SELECT st_astext(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'));
 ----
-36.114646
+POINT (-115.17281600000013 36.11464599999995)
 
-query R
-SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'), 'lon'), 6);
+# 9. PostGIS c0w3h cell center (lon -126.01318359375, lat 48.01025390625)
+query T
+SELECT st_astext(st_pointfromgeohash('c0w3h'));
 ----
--115.172816
-
-# 9. PostGIS c0w3h cell center (lat 48.01025390625, lon -126.01318359375)
-query R
-SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat');
-----
-48.01025390625
-
-query R
-SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lon');
-----
--126.01318359375
+POINT (-126.01318359375 48.01025390625)
 
 # =============================================================================
 # st_geohash_bbox — bounding box
@@ -119,11 +136,11 @@ SELECT st_geohash_neighbors('ezs42')::VARCHAR;
 ----
 [ezs48, ezs49, ezs43, ezs41, ezs40, ezefp, ezefr, ezefx]
 
-# 12. Neighbors of shanghai wtw3sj (precision 6)
+# 12. Neighbors of shanghai wtw3sj (precision 6), public order locked.
 query T
-SELECT list_sort(st_geohash_neighbors('wtw3sj'))::VARCHAR;
+SELECT st_geohash_neighbors('wtw3sj')::VARCHAR;
 ----
-[wtw3eu, wtw3ev, wtw3ey, wtw3sh, wtw3sk, wtw3sm, wtw3sn, wtw3sq]
+[wtw3sn, wtw3sq, wtw3sm, wtw3sk, wtw3sh, wtw3eu, wtw3ev, wtw3ey]
 
 # =============================================================================
 # NULL propagation
@@ -199,6 +216,39 @@ SELECT st_geohash('NaN'::DOUBLE, 0.0, 5);
 ----
 <REGEX>:Out of Range Error.*Latitude out of range.*
 
+# NaN longitude
+statement error
+SELECT st_geohash(0.0, 'NaN'::DOUBLE, 5);
+----
+<REGEX>:Out of Range Error.*Longitude out of range.*
+
+# Infinity
+statement error
+SELECT st_geohash('inf'::DOUBLE, 0.0, 5);
+----
+<REGEX>:Out of Range Error.*Latitude out of range.*
+
+statement error
+SELECT st_geohash(0.0, 'inf'::DOUBLE, 5);
+----
+<REGEX>:Out of Range Error.*Longitude out of range.*
+
+statement error
+SELECT st_geohash('-inf'::DOUBLE, 0.0, 5);
+----
+<REGEX>:Out of Range Error.*Latitude out of range.*
+
+statement error
+SELECT st_geohash(0.0, '-inf'::DOUBLE, 5);
+----
+<REGEX>:Out of Range Error.*Longitude out of range.*
+
+# Invalid Base32 is rejected by neighbor lookup as well as decode.
+statement error
+SELECT st_geohash_neighbors('invalid!chars');
+----
+<REGEX>:Invalid Input Error.*Invalid Base32 character.*
+
 # =============================================================================
 # Boundary cells — neighbors are exact (bitwise grid traversal, no clamp/degenerate duplicates)
 # =============================================================================
@@ -209,29 +259,43 @@ SELECT st_geohash_neighbors('upb')::VARCHAR;
 ----
 [h00, h01, upc, up9, up8, gzx, gzz, 5bp]
 
-# 14. North pole + antimeridian cell 'zzz': 8 distinct neighbors
+# South-polar cell 'h00': cylindrical south wrap and exact public ordering.
 query T
-SELECT list_sort(st_geohash_neighbors('zzz'))::VARCHAR;
+SELECT st_geohash_neighbors('h00')::VARCHAR;
 ----
-[000, bp8, bpb, pbn, pbp, zzw, zzx, zzy]
+[h02, h03, h01, upc, upb, gzz, 5bp, 5br]
 
-# 15. East antimeridian cell 'xbp' (lon 179.5): 8 distinct neighbors
+# 14. North pole + antimeridian cell 'zzz': public order locked.
 query T
-SELECT list_sort(st_geohash_neighbors('xbp'))::VARCHAR;
+SELECT st_geohash_neighbors('zzz')::VARCHAR;
 ----
-[2pb, 800, 802, rzy, rzz, xbn, xbq, xbr]
+[pbp, 000, bpb, bp8, zzx, zzw, zzy, pbn]
+
+# 15. East antimeridian cell 'xbp' (lon 179.5): public order locked.
+query T
+SELECT st_geohash_neighbors('xbp')::VARCHAR;
+----
+[xbr, 802, 800, 2pb, rzz, rzy, xbn, xbq]
+
+# West antimeridian cell '800': public order locked.
+query T
+SELECT st_geohash_neighbors('800')::VARCHAR;
+----
+[802, 803, 801, 2pc, 2pb, rzz, xbp, xbr]
+
+# Flat (non-constant) input vectors for neighbors.
+query T
+SELECT st_geohash_neighbors(h)::VARCHAR FROM (VALUES ('ezs42'), ('upb')) t(h);
+----
+[ezs48, ezs49, ezs43, ezs41, ezs40, ezefp, ezefr, ezefx]
+[h00, h01, upc, up9, up8, gzx, gzz, 5bp]
 
 # =============================================================================
 # NULL propagation for STRUCT/LIST-returning functions
 # =============================================================================
 
-query R
-SELECT struct_extract(st_pointfromgeohash(NULL), 'lat');
-----
-NULL
-
-query R
-SELECT struct_extract(st_pointfromgeohash(NULL), 'lon');
+query T
+SELECT st_pointfromgeohash(NULL);
 ----
 NULL
 
@@ -251,19 +315,12 @@ true
 # SetVectorType(CONSTANT_VECTOR) leaves FLAT children and misaligns after reuse.
 # =============================================================================
 
-query R
-SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat') FROM range(3);
+query T
+SELECT st_astext(st_pointfromgeohash('c0w3h')) FROM range(3);
 ----
-48.01025390625
-48.01025390625
-48.01025390625
-
-query R
-SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lon') FROM range(3);
-----
--126.01318359375
--126.01318359375
--126.01318359375
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
 
 query R
 SELECT struct_extract(st_geohash_bbox('ezs42'), 'min_lat') FROM range(3);
@@ -273,26 +330,26 @@ SELECT struct_extract(st_geohash_bbox('ezs42'), 'min_lat') FROM range(3);
 42.583984375
 
 query T
-SELECT list_sort(st_geohash_neighbors('ezs42'))::VARCHAR FROM range(2);
+SELECT st_geohash_neighbors('ezs42')::VARCHAR FROM range(2);
 ----
-[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
-[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
+[ezs48, ezs49, ezs43, ezs41, ezs40, ezefp, ezefr, ezefx]
+[ezs48, ezs49, ezs43, ezs41, ezs40, ezefp, ezefr, ezefx]
 
 query I
 SELECT COUNT(*) FROM (SELECT unnest(st_geohash_neighbors('ezs42')) FROM range(2));
 ----
 16
 
-query R
-SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat') FROM range(8) WHERE range % 2 = 0;
+query T
+SELECT st_astext(st_pointfromgeohash('c0w3h')) FROM range(8) WHERE range % 2 = 0;
 ----
-48.01025390625
-48.01025390625
-48.01025390625
-48.01025390625
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
 
-query R
-SELECT struct_extract(st_pointfromgeohash(NULL), 'lat') FROM range(2);
+query T
+SELECT st_pointfromgeohash(NULL) FROM range(2);
 ----
 NULL
 NULL

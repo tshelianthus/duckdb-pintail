@@ -1,0 +1,382 @@
+# name: test/sql/geohash_geometry.test
+# description: Native Core GEOMETRY geohash decode without DuckDB Spatial
+# group: [pintail]
+
+require pintail
+
+# =============================================================================
+# Spatial must not be loaded
+# =============================================================================
+
+query T
+SELECT loaded
+FROM duckdb_extensions()
+WHERE extension_name = 'spatial';
+----
+false
+
+# =============================================================================
+# Return types and CRS
+# =============================================================================
+
+query T
+SELECT typeof(st_pointfromgeohash('wtqnxt9'));
+----
+GEOMETRY('EPSG:4326')
+
+query T
+SELECT typeof(st_geomfromgeohash('wtqnxt9'));
+----
+GEOMETRY('EPSG:4326')
+
+query T
+SELECT typeof(st_pointfromgeohash('wtqnxt9', 7));
+----
+GEOMETRY('EPSG:4326')
+
+query T
+SELECT typeof(st_geomfromgeohash('wtqnxt9', 7));
+----
+GEOMETRY('EPSG:4326')
+
+query T
+SELECT st_crs(st_pointfromgeohash('wtqnxt9'));
+----
+EPSG:4326
+
+query T
+SELECT st_crs(st_geomfromgeohash('wtqnxt9'));
+----
+EPSG:4326
+
+query I
+SELECT octet_length(st_aswkb(st_pointfromgeohash('wtqnxt9')));
+----
+21
+
+query I
+SELECT octet_length(st_aswkb(st_geomfromgeohash('wtqnxt9')));
+----
+93
+
+# =============================================================================
+# Center POINT and closed POLYGON for the reference cell
+# =============================================================================
+
+query T
+SELECT st_astext(st_pointfromgeohash('wtqnxt9'));
+----
+POINT (121.26914978027344 30.704727172851562)
+
+query T
+SELECT st_astext(st_geomfromgeohash('wtqnxt9'));
+----
+POLYGON ((121.26846313476562 30.70404052734375, 121.26846313476562 30.705413818359375, 121.26983642578125 30.705413818359375, 121.26983642578125 30.70404052734375, 121.26846313476562 30.70404052734375))
+
+# =============================================================================
+# Full precision vs explicit shorter precision
+# =============================================================================
+
+query T
+SELECT st_astext(st_pointfromgeohash('wtqnxt9', 7));
+----
+POINT (121.26914978027344 30.704727172851562)
+
+query T
+SELECT st_astext(st_pointfromgeohash('wtqnxt9', 5));
+----
+POINT (121.26708984375 30.69580078125)
+
+query T
+SELECT st_astext(st_pointfromgeohash('wtqnxt9', 5)) = st_astext(st_pointfromgeohash('wtqnx'));
+----
+true
+
+query T
+SELECT st_astext(st_geomfromgeohash('wtqnxt9', 5));
+----
+POLYGON ((121.2451171875 30.673828125, 121.2451171875 30.7177734375, 121.2890625 30.7177734375, 121.2890625 30.673828125, 121.2451171875 30.673828125))
+
+query T
+SELECT st_astext(st_geomfromgeohash('wtqnxt9', 5)) = st_astext(st_geomfromgeohash('wtqnx'));
+----
+true
+
+# =============================================================================
+# Length 1 and length 20
+# =============================================================================
+
+query T
+SELECT st_astext(st_pointfromgeohash('w'));
+----
+POINT (112.5 22.5)
+
+query T
+SELECT st_astext(st_geomfromgeohash('w'));
+----
+POLYGON ((90 0, 90 45, 135 45, 135 0, 90 0))
+
+query T
+SELECT st_astext(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'));
+----
+POINT (-115.17281600000013 36.11464599999995)
+
+query T
+SELECT st_astext(st_geomfromgeohash('9qqj7nmxncgyy4d0dbxq'));
+----
+POLYGON ((-115.1728160000003 36.11464599999987, -115.1728160000003 36.114646000000036, -115.17281599999997 36.114646000000036, -115.17281599999997 36.11464599999987, -115.1728160000003 36.11464599999987))
+
+# =============================================================================
+# Invalid inputs
+# =============================================================================
+
+statement error
+SELECT st_pointfromgeohash('invalid!chars');
+----
+<REGEX>:Invalid Input Error.*Invalid Base32 character.*
+
+statement error
+SELECT st_geomfromgeohash('invalid!chars');
+----
+<REGEX>:Invalid Input Error.*Invalid Base32 character.*
+
+statement error
+SELECT st_pointfromgeohash('');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_geomfromgeohash('');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_pointfromgeohash('012345678901234567890');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_geomfromgeohash('012345678901234567890');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_pointfromgeohash('wtqnxt9', 0);
+----
+<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+
+statement error
+SELECT st_geomfromgeohash('wtqnxt9', 0);
+----
+<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+
+statement error
+SELECT st_pointfromgeohash('wtqnxt9', 8);
+----
+<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+
+statement error
+SELECT st_geomfromgeohash('wtqnxt9', 8);
+----
+<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+
+statement error
+SELECT st_pointfromgeohash('wtqnxt9', -1);
+----
+<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+
+# Full-string validation still applies when precision is supplied.
+statement error
+SELECT st_pointfromgeohash('invalid!chars', 3);
+----
+<REGEX>:Invalid Input Error.*Invalid Base32 character.*
+
+statement error
+SELECT st_pointfromgeohash('', 1);
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+# =============================================================================
+# NULL propagation
+# =============================================================================
+
+query T
+SELECT st_pointfromgeohash(NULL);
+----
+NULL
+
+query T
+SELECT st_geomfromgeohash(NULL);
+----
+NULL
+
+query T
+SELECT st_pointfromgeohash(NULL, 5);
+----
+NULL
+
+query T
+SELECT st_geomfromgeohash('wtqnxt9', NULL);
+----
+NULL
+
+query T
+SELECT st_pointfromgeohash(NULL, NULL);
+----
+NULL
+
+query T
+SELECT st_astext(st_pointfromgeohash(NULL)) FROM range(2);
+----
+NULL
+NULL
+
+# =============================================================================
+# Batch / non-constant vectors
+# =============================================================================
+
+query T
+SELECT st_astext(st_pointfromgeohash(h))
+FROM (VALUES ('c0w3h'), ('ezs42'), ('wtqnxt9')) t(h);
+----
+POINT (-126.01318359375 48.01025390625)
+POINT (-5.60302734375 42.60498046875)
+POINT (121.26914978027344 30.704727172851562)
+
+query T
+SELECT st_astext(st_geomfromgeohash(h, p))
+FROM (VALUES ('wtqnxt9', 1), ('wtqnxt9', 5), ('wtqnxt9', 7)) t(h, p);
+----
+POLYGON ((90 0, 90 45, 135 45, 135 0, 90 0))
+POLYGON ((121.2451171875 30.673828125, 121.2451171875 30.7177734375, 121.2890625 30.7177734375, 121.2890625 30.673828125, 121.2451171875 30.673828125))
+POLYGON ((121.26846313476562 30.70404052734375, 121.26846313476562 30.705413818359375, 121.26983642578125 30.705413818359375, 121.26983642578125 30.70404052734375, 121.26846313476562 30.70404052734375))
+
+# Constant result broadcast, including after a filter slice.
+query T
+SELECT st_astext(st_pointfromgeohash('c0w3h')) FROM range(3);
+----
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
+POINT (-126.01318359375 48.01025390625)
+
+query T
+SELECT st_astext(st_geomfromgeohash('c0w3h')) FROM range(8) WHERE range % 2 = 0;
+----
+POLYGON ((-126.03515625 47.98828125, -126.03515625 48.0322265625, -125.9912109375 48.0322265625, -125.9912109375 47.98828125, -126.03515625 47.98828125))
+POLYGON ((-126.03515625 47.98828125, -126.03515625 48.0322265625, -125.9912109375 48.0322265625, -125.9912109375 47.98828125, -126.03515625 47.98828125))
+POLYGON ((-126.03515625 47.98828125, -126.03515625 48.0322265625, -125.9912109375 48.0322265625, -125.9912109375 47.98828125, -126.03515625 47.98828125))
+POLYGON ((-126.03515625 47.98828125, -126.03515625 48.0322265625, -125.9912109375 48.0322265625, -125.9912109375 47.98828125, -126.03515625 47.98828125))
+
+# =============================================================================
+# Polar and antimeridian cells
+# =============================================================================
+
+query T
+SELECT st_astext(st_pointfromgeohash('upbpb'));
+----
+POINT (0.02197265625 89.97802734375)
+
+query T
+SELECT st_astext(st_geomfromgeohash('upbpb'));
+----
+POLYGON ((0 89.9560546875, 0 90, 0.0439453125 90, 0.0439453125 89.9560546875, 0 89.9560546875))
+
+query T
+SELECT st_astext(st_pointfromgeohash('h0000'));
+----
+POINT (0.02197265625 -89.97802734375)
+
+query T
+SELECT st_astext(st_geomfromgeohash('h0000'));
+----
+POLYGON ((0 -90, 0 -89.9560546875, 0.0439453125 -89.9560546875, 0.0439453125 -90, 0 -90))
+
+query T
+SELECT st_astext(st_pointfromgeohash('xbpbp'));
+----
+POINT (179.97802734375 0.02197265625)
+
+query T
+SELECT st_astext(st_geomfromgeohash('xbpbp'));
+----
+POLYGON ((179.9560546875 0, 179.9560546875 0.0439453125, 180 0.0439453125, 180 0, 179.9560546875 0))
+
+query T
+SELECT st_astext(st_pointfromgeohash('800'));
+----
+POINT (-179.296875 0.703125)
+
+query T
+SELECT st_astext(st_geomfromgeohash('800'));
+----
+POLYGON ((-180 0, -180 1.40625, -178.59375 1.40625, -178.59375 0, -180 0))
+
+# =============================================================================
+# Canonical decode vectors — exact Core ST_AsText
+# PostGIS, Wikipedia, Shanghai, equator, and the contract maximum-length hash.
+# Polar / antimeridian cells are covered in the previous section.
+# Polygon vertex order: lower-left, upper-left, upper-right, lower-right, close.
+# =============================================================================
+
+# PostGIS official: ST_GeoHash(ST_Point(-126, 48), 5) = 'c0w3h'
+query T
+SELECT st_astext(st_pointfromgeohash('c0w3h'));
+----
+POINT (-126.01318359375 48.01025390625)
+
+query T
+SELECT st_astext(st_geomfromgeohash('c0w3h'));
+----
+POLYGON ((-126.03515625 47.98828125, -126.03515625 48.0322265625, -125.9912109375 48.0322265625, -125.9912109375 47.98828125, -126.03515625 47.98828125))
+
+# Wikipedia ezs42
+query T
+SELECT st_astext(st_pointfromgeohash('ezs42'));
+----
+POINT (-5.60302734375 42.60498046875)
+
+query T
+SELECT st_astext(st_geomfromgeohash('ezs42'));
+----
+POLYGON ((-5.625 42.5830078125, -5.625 42.626953125, -5.5810546875 42.626953125, -5.5810546875 42.5830078125, -5.625 42.5830078125))
+
+# Wikipedia / Geohash.org classic: (57.64911, 10.40744) prefix 'u4pru'
+query T
+SELECT st_astext(st_pointfromgeohash('u4pru'));
+----
+POINT (10.39306640625 57.63427734375)
+
+query T
+SELECT st_astext(st_geomfromgeohash('u4pru'));
+----
+POLYGON ((10.37109375 57.6123046875, 10.37109375 57.65625, 10.4150390625 57.65625, 10.4150390625 57.6123046875, 10.37109375 57.6123046875))
+
+# Shanghai contract vector
+query T
+SELECT st_astext(st_pointfromgeohash('wtw3sj'));
+----
+POINT (121.4703369140625 31.23138427734375)
+
+query T
+SELECT st_astext(st_geomfromgeohash('wtw3sj'));
+----
+POLYGON ((121.46484375 31.2286376953125, 121.46484375 31.234130859375, 121.475830078125 31.234130859375, 121.475830078125 31.2286376953125, 121.46484375 31.2286376953125))
+
+# Equator + prime meridian
+query T
+SELECT st_astext(st_pointfromgeohash('s0000'));
+----
+POINT (0.02197265625 0.02197265625)
+
+query T
+SELECT st_astext(st_geomfromgeohash('s0000'));
+----
+POLYGON ((0 0, 0 0.0439453125, 0.0439453125 0.0439453125, 0.0439453125 0, 0 0))
+
+# Confirm Spatial is still not loaded after the geometry tests.
+query T
+SELECT loaded
+FROM duckdb_extensions()
+WHERE extension_name = 'spatial';
+----
+false

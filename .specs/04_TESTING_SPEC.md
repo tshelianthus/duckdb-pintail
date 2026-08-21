@@ -35,3 +35,25 @@ Extension identity: name `pintail` (no hyphens); no segfault/panic on load.
    - `st_geohash(NULL, 121.47, 5)` → `NULL`
    - `st_geohash(31.23, NULL, 5)` → `NULL`
    - `st_geohash(31.23, 121.47, NULL)` → `NULL`
+
+## Native GEOMETRY Geohash Decode Gate
+
+`test/sql/geohash_geometry.test` must run with DuckDB Spatial not loaded and cover:
+
+1. `duckdb_extensions()` reports `spatial.loaded = false`.
+2. Both decode functions return Core `GEOMETRY` with CRS `EPSG:4326`.
+3. `st_pointfromgeohash` produces the exact cell center as `(longitude, latitude)`.
+4. `st_geomfromgeohash` produces a closed five-vertex ring ordered lower-left, upper-left,
+   upper-right, lower-right, lower-left.
+5. Full and explicit shorter precision; lengths 1 and 20; invalid characters, empty and overlong
+   strings; precision 0 and precision above input length.
+6. NULL propagation for every overload, non-constant batch vectors, polar cells, and antimeridian cells.
+7. Canonical decode vectors compare `st_astext` of both functions against DuckDB Core's
+   exact WKT format. Cover at least PostGIS `c0w3h`, Wikipedia `ezs42` / `u4pru`,
+   Shanghai `wtw3sj`, equator `s0000`, polar and antimeridian cells, and the contract
+   maximum-length hash. Polygon rings must match the WKT vertex order
+   (lower-left → upper-left → upper-right → lower-right → close).
+
+DuckDB 1.5.0 and later provide native `GEOMETRY` in Core. These tests must not install, load, or link
+DuckDB Spatial. Tier 0 directly emits standard WKB; GEOS/PROJ remain reserved for topology operations
+and coordinate transformations.

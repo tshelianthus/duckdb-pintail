@@ -17,3 +17,9 @@ query T
 SELECT COUNT(*) >= 1 FROM duckdb_functions() WHERE function_name = 'pintail';
 ----
 true
+
+# Community-release smoke: a public geohash function must be callable after LOAD.
+query T
+SELECT st_geohash(31.2304, 121.4737, 6);
+----
+wtw3sj

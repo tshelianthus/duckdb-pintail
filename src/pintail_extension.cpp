@@ -2,6 +2,7 @@
 
 #include "pintail_extension.hpp"
 #include "pintail_geohash.hpp"
+#include "pintail_wkb.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -65,12 +66,6 @@ static void ReferenceConstantVarcharResult(Vector &hash, Vector &result,
 	result.Reference(make(result.GetType(), s));
 }
 
-static Value MakePointFromGeohashValue(const LogicalType &type, const string &hash) {
-	auto bbox = GeohashDecodeBBox(hash);
-	return Value::STRUCT(type, {Value::DOUBLE((bbox.min_lat + bbox.max_lat) / 2.0),
-	                            Value::DOUBLE((bbox.min_lon + bbox.max_lon) / 2.0)});
-}
-
 static Value MakeBBoxFromGeohashValue(const LogicalType &type, const string &hash) {
 	auto bbox = GeohashDecodeBBox(hash);
 	return Value::STRUCT(type, {Value::DOUBLE(bbox.min_lat), Value::DOUBLE(bbox.min_lon), Value::DOUBLE(bbox.max_lat),
@@ -89,36 +84,45 @@ static Value MakeNeighborsFromGeohashValue(const LogicalType &type, const string
 }
 
 // ---------------------------------------------------------------------------
-// st_pointfromgeohash(hash) -> STRUCT(lat DOUBLE, lon DOUBLE)
+// Native GEOMETRY(EPSG:4326) geohash decode
 // ---------------------------------------------------------------------------
-inline void StPointFromGeohashFun(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &hash = args.data[0];
-	if (hash.GetVectorType() == VectorType::CONSTANT_VECTOR) {
-		ReferenceConstantVarcharResult(hash, result, MakePointFromGeohashValue);
-		return;
-	}
+static LogicalType Geometry4326() {
+	return LogicalType::GEOMETRY("EPSG:4326");
+}
 
-	UnifiedVectorFormat hdata;
-	hash.ToUnifiedFormat(args.size(), hdata);
-	auto hash_ptr = hdata.GetData<string_t>();
+static string_t PointFromDecodedHash(Vector &result, const string &hash) {
+	auto bbox = GeohashDecodeBBox(hash);
+	return EncodeWkbPoint(result, (bbox.min_lon + bbox.max_lon) / 2.0, (bbox.min_lat + bbox.max_lat) / 2.0);
+}
 
-	auto &entries = StructVector::GetEntries(result);
-	auto lat_data = FlatVector::GetData<double>(*entries[0]);
-	auto lon_data = FlatVector::GetData<double>(*entries[1]);
+static string_t PolygonFromDecodedHash(Vector &result, const string &hash) {
+	return EncodeWkbPolygon(result, GeohashDecodeBBox(hash));
+}
 
-	for (idx_t i = 0; i < args.size(); i++) {
-		auto idx = hdata.sel->get_index(i);
-		if (!hdata.validity.RowIsValid(idx)) {
-			// Initialize child slots so no uninitialized data is ever read back.
-			lat_data[i] = 0.0;
-			lon_data[i] = 0.0;
-			FlatVector::SetNull(result, i, true);
-			continue;
-		}
-		auto bbox = GeohashDecodeBBox(hash_ptr[idx].GetString());
-		lat_data[i] = (bbox.min_lat + bbox.max_lat) / 2.0;
-		lon_data[i] = (bbox.min_lon + bbox.max_lon) / 2.0;
-	}
+inline void PointFromGeohashFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	UnaryExecutor::Execute<string_t, string_t>(args.data[0], result, args.size(), [&](string_t hash) {
+		return PointFromDecodedHash(result, hash.GetString());
+	});
+}
+
+inline void PointFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	BinaryExecutor::Execute<string_t, int32_t, string_t>(
+	    args.data[0], args.data[1], result, args.size(), [&](string_t hash, int32_t precision) {
+		    return PointFromDecodedHash(result, GeohashPrefix(hash.GetString(), precision));
+	    });
+}
+
+inline void GeomFromGeohashFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	UnaryExecutor::Execute<string_t, string_t>(args.data[0], result, args.size(), [&](string_t hash) {
+		return PolygonFromDecodedHash(result, hash.GetString());
+	});
+}
+
+inline void GeomFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	BinaryExecutor::Execute<string_t, int32_t, string_t>(
+	    args.data[0], args.data[1], result, args.size(), [&](string_t hash, int32_t precision) {
+		    return PolygonFromDecodedHash(result, GeohashPrefix(hash.GetString(), precision));
+	    });
 }
 
 // ---------------------------------------------------------------------------
@@ -196,13 +200,6 @@ inline void StGeohashNeighborsFun(DataChunk &args, ExpressionState &state, Vecto
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
-static LogicalType MakePointStructType() {
-	child_list_t<LogicalType> children;
-	children.emplace_back("lat", LogicalType::DOUBLE);
-	children.emplace_back("lon", LogicalType::DOUBLE);
-	return LogicalType::STRUCT(children);
-}
-
 static LogicalType MakeBBoxStructType() {
 	child_list_t<LogicalType> children;
 	children.emplace_back("min_lat", LogicalType::DOUBLE);
@@ -228,10 +225,24 @@ static void LoadInternal(ExtensionLoader &loader) {
 	loader.RegisterFunction(geohash2);
 
 	// st_pointfromgeohash
-	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType::VARCHAR}, MakePointStructType(),
-	                                  StPointFromGeohashFun);
+	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
+	                                  PointFromGeohashFunction);
 	point_from_geohash.SetFallible();
 	loader.RegisterFunction(point_from_geohash);
+	ScalarFunction point_from_geohash_prec("st_pointfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
+	                                       Geometry4326(), PointFromGeohashPrecisionFunction);
+	point_from_geohash_prec.SetFallible();
+	loader.RegisterFunction(point_from_geohash_prec);
+
+	// st_geomfromgeohash
+	ScalarFunction geom_from_geohash("st_geomfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
+	                                 GeomFromGeohashFunction);
+	geom_from_geohash.SetFallible();
+	loader.RegisterFunction(geom_from_geohash);
+	ScalarFunction geom_from_geohash_prec("st_geomfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
+	                                      Geometry4326(), GeomFromGeohashPrecisionFunction);
+	geom_from_geohash_prec.SetFallible();
+	loader.RegisterFunction(geom_from_geohash_prec);
 
 	// st_geohash_bbox
 	ScalarFunction geohash_bbox("st_geohash_bbox", {LogicalType::VARCHAR}, MakeBBoxStructType(), StGeohashBBoxFun);

@@ -4,7 +4,9 @@
 - **Language**: **C++17** (matches DuckDB core & official extension-template; C++11 minimum per duckdb-spatial, C++17 preferred).
 - **Build System**: **CMake** (>= 3.5) driven by DuckDB's `extension-ci-tools` makefiles via `make`.
 - **Extension Basis**: the official `duckdb/extension-template` (C++), vendored as the repo scaffolding.
-- **Core Dependencies (Tier 0)**: **none** — pure C++ bit/string math. (Tier 1 will vendor GEOS/PROJ under `third_party/`.)
+- **Core Dependencies (Tier 0)**: **none** — pure C++ bit/string math and direct WKB encoding.
+  DuckDB 1.5.0 and later provide native `GEOMETRY` in Core, so Tier 0 may return
+  `GEOMETRY(EPSG:4326)` without installing, loading, or linking DuckDB Spatial.
 
 ## 2. Extension Skeleton (per extension-template)
 - Entry point via `DUCKDB_CPP_EXTENSION_ENTRY(pintail, loader)` (no `DUCKDB_EXTENSION_MAIN` in library builds; uses the generated `pintail_extension` + `pintail_loadable_extension` targets).
@@ -27,9 +29,12 @@ duckdb-pintail/
 ├── third_party/                # (reserved) Tier-1 vendored GEOS/PROJ — empty in Tier 0
 ├── src/
 │   ├── include/
-│   │   └── pintail_extension.hpp   # PintailExtension class declaration
+│   │   ├── pintail_extension.hpp   # PintailExtension class declaration
+│   │   ├── pintail_geohash.hpp     # dependency-free Geohash algorithms
+│   │   └── pintail_wkb.hpp         # dependency-free WKB encoder interface
 │   ├── pintail_extension.cpp       # DU... entry point + LoadInternal registration
-│   └── geohash/               # (reserved) Tier-0 geohash implementation units
+│   └── geohash/
+│       └── pintail_wkb.cpp          # Little-Endian POINT/POLYGON WKB
 ├── test/
 │   └── sql/                   # SQLLogicTest cases
 ├── CMakeLists.txt             # build_static_extension + build_loadable_extension
@@ -40,6 +45,10 @@ duckdb-pintail/
 ```
 
 ## 5. GEOS / PROJ Integration Point (reserved for Tier 1)
+- DuckDB Core's native `GEOMETRY` stores standard WKB and provides basic inspection functions such as
+  `ST_AsText`, `ST_AsWKB`, and `ST_CRS`. Pintail writes WKB directly into DuckDB-managed result-vector
+  memory and declares `LogicalType::GEOMETRY("EPSG:4326")`; this is a Tier-0 capability.
+- GEOS/PROJ remain unnecessary until Pintail needs topology operations or coordinate transformations.
 - `CMakeLists.txt` will, in Tier 1, `FetchContent`/vendor GEOS & PROJ under `third_party/`, build them statically, and `target_link_libraries` them into both the static and loadable extension targets — the exact pattern `duckdb-spatial` uses.
 - `vcpkg.json` gains `geos` and `proj` dependencies at that point.
 - No architectural change to the extension skeleton is required; this is purely additive.

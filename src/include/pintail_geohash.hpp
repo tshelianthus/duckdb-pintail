@@ -19,13 +19,13 @@
 namespace duckdb {
 
 //! The standard geohash Base32 alphabet (a, i, l, o are excluded).
-inline constexpr const char *GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+static constexpr const char *GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
 
 //! Default geohash precision when the caller omits it (per API contract).
-inline constexpr int32_t DEFAULT_GEOHASH_PRECISION = 12;
+static constexpr int32_t DEFAULT_GEOHASH_PRECISION = 12;
 
 //! Maximum geohash precision (full double-precision resolution).
-inline constexpr int32_t MAX_GEOHASH_PRECISION = 20;
+static constexpr int32_t MAX_GEOHASH_PRECISION = 20;
 
 //! Reverse lookup: Base32 character -> 0..31 index, or -1 if invalid.
 inline int32_t GeohashBase32Index(char c) {
@@ -147,6 +147,17 @@ inline GeohashBBox GeohashDecodeBBox(const std::string &geohash) {
 	return GeohashBBox {lat_lo, lon_lo, lat_hi, lon_hi};
 }
 
+//! Truncates a validated geohash to the first `precision` characters.
+//! `precision` must be in `[1, geohash.size()]`; the full input is still validated first.
+inline std::string GeohashPrefix(const std::string &geohash, int32_t precision) {
+	ValidateGeohash(geohash);
+	if (precision < 1 || static_cast<size_t>(precision) > geohash.size()) {
+		throw InvalidInputException("Geohash decode precision out of range: %d (must be within [1, %llu])", precision,
+		                            static_cast<unsigned long long>(geohash.size()));
+	}
+	return geohash.substr(0, static_cast<size_t>(precision));
+}
+
 //! Cardinal-direction code for the base adjacent() step: 0=N, 1=S, 2=E, 3=W.
 //! Distinct from GeohashNeighborSlot, which indexes the 8-cell public output array.
 enum GeohashCardinal : int32_t { GEOHASH_CARD_N = 0, GEOHASH_CARD_S = 1, GEOHASH_CARD_E = 2, GEOHASH_CARD_W = 3 };
@@ -167,7 +178,7 @@ namespace {
 
 //! Boundary tables (davetroy/geohash-js reference): for each cardinal direction and
 //! parity (even/odd length), the set of trailing Base32 chars that sit on the world edge.
-inline constexpr const char *GEOHASH_BORDER[4][2] = {
+constexpr const char *GEOHASH_BORDER[4][2] = {
     {"prxz", "bcfguvyz"},     // N
     {"028b", "0145hjnp"},     // S
     {"bcfguvyz", "prxz"},     // E
@@ -175,7 +186,7 @@ inline constexpr const char *GEOHASH_BORDER[4][2] = {
 };
 
 //! Neighbor translation tables: new last char for each cardinal direction and parity.
-inline constexpr const char *GEOHASH_NEIGHBOR[4][2] = {
+constexpr const char *GEOHASH_NEIGHBOR[4][2] = {
     {"p0r21436x8zb9dcf5h7kjnmqesgutwvy", "bc01fg45238967deuvhjyznpkmstqrwx"}, // N
     {"14365h7k9dcfesgujnmqp0r2twvyx8zb", "238967debc01fg45kmstqrwxuvhjyznp"}, // S
     {"bc01fg45238967deuvhjyznpkmstqrwx", "p0r21436x8zb9dcf5h7kjnmqesgutwvy"}, // E

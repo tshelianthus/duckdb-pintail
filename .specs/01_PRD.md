@@ -16,13 +16,14 @@ Pintail adopts a **tiered dependency model** to avoid paying for heavy GIS libra
 
 | Tier | Scope | Dependencies |
 | :--- | :--- | :--- |
-| **Tier 0 (MVP — Geohash grids)** | Pure bit-math grid encoding/decoding (`st_geohash`, `st_pointfromgeohash`, `st_geohash_bbox`, `st_geohash_neighbors`) | **Zero external deps** (pure C++ bit/string math). No GEOS/GDAL/PROJ, no OpenSSL. |
-| **Tier 1 (future — geometry topology)** | `GEOMETRY` type, polygon overlay (`st_intersection`, `st_union`, …) | Vendor GEOS (and PROJ for CRS transforms) under `third_party/` and statically link, exactly as `duckdb-spatial` does. |
+| **Tier 0 (MVP — Geohash grids)** | Pure bit-math encoding/decoding plus direct WKB (`st_geohash`, `st_pointfromgeohash`, `st_geomfromgeohash`, `st_geohash_bbox`, `st_geohash_neighbors`). Returns Core `GEOMETRY(EPSG:4326)` without Spatial. | **Zero external deps** (pure C++ bit/string math and WKB). No GEOS/GDAL/PROJ, no OpenSSL. |
+| **Tier 1 (future — geometry topology)** | Topology overlays (`st_intersection`, `st_union`, …) and coordinate transforms | Vendor GEOS (and PROJ for CRS transforms) under `third_party/` and statically link, exactly as `duckdb-spatial` does. |
 
+- DuckDB 1.5.0 and later provide native `GEOMETRY` in Core. Tier 0 can emit standard WKB and return `GEOMETRY(EPSG:4326)` without installing, loading, or linking DuckDB Spatial. GEOS/PROJ remain reserved for topology operations and coordinate transformations.
 - **Reference implementation**: the official `duckdb-spatial` bundles GEOS/GDAL/PROJ under `third_party/` and statically links them, so end users install nothing beyond CMake + a C++ compiler. Pintail will follow the same pattern when Tier 1 features are added.
-- **No wheel reinvention**: where a mature C++ library exists (GEOS/PROJ), Pintail will reuse it rather than reimplement. Where no such library applies (pure Geohash bit math), Pintail implements directly in C++.
+- **No wheel reinvention**: where a mature C++ library exists (GEOS/PROJ), Pintail will reuse it rather than reimplement. Where no such library applies (pure Geohash bit math and WKB), Pintail implements directly in C++.
 - **Deployment guarantee**: Tier 0 keeps the `.duckdb_extension` binary tiny, wasm-portable, and fast to cross-compile on the community CI matrix.
-- **CRS / axis-order convention**: Tier 1 geometry/CRS functions reserve an optional `always_xy BOOLEAN` argument (default `false`) to toggle between CRS-defined axis order (OGC/ISO default) and explicit `(lon, lat)` order for PostGIS/GeoJSON interoperability. See `.specs/03_API_CONTRACT.md` — it does **not** apply to Tier-0 grid functions whose `lat`/`lon` arguments are already explicit.
+- **CRS / axis-order convention**: Tier 1 geometry/CRS functions reserve an optional `always_xy BOOLEAN` argument (default `false`) to toggle between CRS-defined axis order (OGC/ISO default) and explicit `(lon, lat)` order for PostGIS/GeoJSON interoperability. See `.specs/03_API_CONTRACT.md`. It does **not** apply to Tier-0 grid functions: `st_geohash` takes named `lat`/`lon` arguments, and Geohash geometry outputs are always `x = longitude`, `y = latitude`.
 
 ## 4. Target Persona & Use Cases
 1. **PostGIS Migrators**: Move analytical workloads from PostgreSQL/PostGIS to DuckDB with `ST_GeoHash` and spatial prefix matching.
