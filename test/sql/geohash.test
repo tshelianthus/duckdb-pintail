@@ -51,18 +51,25 @@ SELECT st_geohash(0.0, 0.0, 5);
 ----
 s0000
 
+# Contract boundaries are inclusive.
+query TTTT
+SELECT st_geohash(90.0, 0.0, 5), st_geohash(-90.0, 0.0, 5),
+       st_geohash(0.0, 180.0, 5), st_geohash(0.0, -180.0, 5);
+----
+upbpb	h0000	xbpbp	80000
+
 # =============================================================================
 # st_pointfromgeohash — decoding (center point)
 # =============================================================================
 
-# 8. PostGIS official: ST_PointFromGeoHash('9qqj7nmxncgyy4d0dbxqz0') = POINT(-115.172816 36.114646)
+# 8. First 20 characters of the PostGIS official vector (the contract maximum).
 query R
-SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxqz0'), 'lat'), 6);
+SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'), 'lat'), 6);
 ----
 36.114646
 
 query R
-SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxqz0'), 'lon'), 6);
+SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxq'), 'lon'), 6);
 ----
 -115.172816
 
@@ -106,11 +113,11 @@ SELECT struct_extract(st_geohash_bbox('ezs42'), 'max_lon');
 # st_geohash_neighbors — 8 adjacent cells
 # =============================================================================
 
-# 11. Neighbors of ezs42 (Wikipedia example, precision 5)
+# 11. Neighbors of ezs42, with public order locked position by position.
 query T
-SELECT list_sort(st_geohash_neighbors('ezs42'))::VARCHAR;
+SELECT st_geohash_neighbors('ezs42')::VARCHAR;
 ----
-[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
+[ezs48, ezs49, ezs43, ezs41, ezs40, ezefp, ezefr, ezefx]
 
 # 12. Neighbors of shanghai wtw3sj (precision 6)
 query T
@@ -165,6 +172,27 @@ SELECT st_pointfromgeohash('invalid!chars');
 ----
 <REGEX>:Invalid Input Error.*Invalid Base32 character.*
 
+# Decode and neighbor inputs share the encoded precision limit [1, 20].
+statement error
+SELECT st_geohash_bbox('012345678901234567890');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_pointfromgeohash('012345678901234567890');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_geohash_neighbors('012345678901234567890');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
+statement error
+SELECT st_pointfromgeohash('');
+----
+<REGEX>:Invalid Input Error.*Geohash length out of range.*
+
 # NaN latitude
 statement error
 SELECT st_geohash('NaN'::DOUBLE, 0.0, 5);
@@ -175,11 +203,11 @@ SELECT st_geohash('NaN'::DOUBLE, 0.0, 5);
 # Boundary cells — neighbors are exact (bitwise grid traversal, no clamp/degenerate duplicates)
 # =============================================================================
 
-# 13. North-polar cell 'upb' (lat 89, lon 0, precision 3): 8 distinct neighbors
+# 13. North-polar cell: cylindrical north wrap and exact public ordering.
 query T
-SELECT list_sort(st_geohash_neighbors('upb'))::VARCHAR;
+SELECT st_geohash_neighbors('upb')::VARCHAR;
 ----
-[5bp, gzx, gzz, h00, h01, up8, up9, upc]
+[h00, h01, upc, up9, up8, gzx, gzz, 5bp]
 
 # 14. North pole + antimeridian cell 'zzz': 8 distinct neighbors
 query T

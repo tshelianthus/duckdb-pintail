@@ -37,6 +37,19 @@ inline int32_t GeohashBase32Index(char c) {
 	return -1;
 }
 
+//! Validates the shared input contract for every geohash-consuming function.
+inline void ValidateGeohash(const std::string &geohash) {
+	if (geohash.empty() || geohash.size() > static_cast<size_t>(MAX_GEOHASH_PRECISION)) {
+		throw InvalidInputException("Geohash length out of range: %llu (must be within [1, 20])",
+		                            static_cast<unsigned long long>(geohash.size()));
+	}
+	for (char c : geohash) {
+		if (GeohashBase32Index(c) < 0) {
+			throw InvalidInputException("Invalid Base32 character in geohash: %s", string(1, c));
+		}
+	}
+}
+
 //! Encodes (lat, lon) into a geohash string of the given precision.
 inline std::string GeohashEncode(double lat, double lon, int32_t precision) {
 	if (!std::isfinite(lat) || lat < -90.0 || lat > 90.0) {
@@ -100,9 +113,7 @@ struct GeohashBBox {
 
 //! Decodes a geohash string into its bounding box (and validates all characters).
 inline GeohashBBox GeohashDecodeBBox(const std::string &geohash) {
-	if (geohash.empty()) {
-		throw InvalidInputException("Geohash string must not be empty");
-	}
+	ValidateGeohash(geohash);
 
 	double lat_lo = -90.0, lat_hi = 90.0;
 	double lon_lo = -180.0, lon_hi = 180.0;
@@ -177,37 +188,34 @@ inline constexpr const char *GEOHASH_NEIGHBOR[4][2] = {
 //! This operates directly on the Base32 cell grid (no lat/lon round-trip), so it is
 //! exact at the poles and antimeridian where a center-offset approach degenerates.
 inline std::string GeohashAdjacent(const std::string &geohash, GeohashCardinal dir) {
-	if (geohash.empty()) {
-		throw InvalidInputException("Geohash string must not be empty");
+	ValidateGeohash(geohash);
+	std::string result = geohash;
+
+	// Propagate an edge crossing toward the root, then translate each affected digit.
+	// This is equivalent to the geohash-js recursive algorithm, but its stack use is
+	// constant and therefore cannot grow with attacker-controlled input.
+	for (size_t remaining = geohash.size(); remaining > 0; remaining--) {
+		const size_t pos = remaining - 1;
+		const char current = geohash[pos];
+		const bool odd = (remaining % 2) == 1;
+		const char *border = GEOHASH_BORDER[dir][odd ? 1 : 0];
+		const char *neighbor = GEOHASH_NEIGHBOR[dir][odd ? 1 : 0];
+		const char *found = strchr(neighbor, current);
+		if (!found) {
+			throw InvalidInputException("Invalid Base32 character in geohash: %s", string(1, current));
+		}
+		const auto translated = static_cast<size_t>(found - neighbor);
+		result[pos] = GEOHASH_BASE32[translated];
+		if (!strchr(border, current)) {
+			break;
+		}
 	}
-
-	char last = geohash.back();
-	std::string parent = geohash.substr(0, geohash.size() - 1);
-	bool odd = (geohash.size() % 2) == 1; // odd length -> use "odd" parity table
-
-	const char *border = GEOHASH_BORDER[dir][odd ? 1 : 0];
-	const char *neighbor = GEOHASH_NEIGHBOR[dir][odd ? 1 : 0];
-
-	// If the last char sits on the world edge for this direction, move up a level first.
-	if (strchr(border, last) && !parent.empty()) {
-		parent = GeohashAdjacent(parent, dir);
-	}
-
-	// The neighbor table is a permutation of the Base32 alphabet: the new last char is
-	// GEOHASH_BASE32[i] where i is the position of `last` within that permutation.
-	const char *found = strchr(neighbor, last);
-	if (!found) {
-		throw InvalidInputException("Invalid Base32 character in geohash: %s", string(1, last));
-	}
-	int32_t idx = static_cast<int32_t>(found - neighbor);
-	return parent + GEOHASH_BASE32[idx];
+	return result;
 }
 
 //! Computes the 8 adjacent cells, ordered [N, NE, E, SE, S, SW, W, NW].
 inline void GeohashNeighbors(const std::string &geohash, std::string out[8]) {
-	if (geohash.empty()) {
-		throw InvalidInputException("Geohash string must not be empty");
-	}
+	ValidateGeohash(geohash);
 
 	out[GEOHASH_SLOT_N] = GeohashAdjacent(geohash, GEOHASH_CARD_N);
 	out[GEOHASH_SLOT_E] = GeohashAdjacent(geohash, GEOHASH_CARD_E);

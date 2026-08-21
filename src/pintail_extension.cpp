@@ -218,23 +218,31 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    ScalarFunction("pintail", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PintailScalarFun));
 
 	// st_geohash
-	loader.RegisterFunction(
-	    ScalarFunction("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::INTEGER},
-	                   LogicalType::VARCHAR, StGeoHash3Fun));
-	loader.RegisterFunction(ScalarFunction("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE},
-	                                       LogicalType::VARCHAR, StGeoHash2Fun));
+	ScalarFunction geohash3("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::INTEGER},
+	                        LogicalType::VARCHAR, StGeoHash3Fun);
+	geohash3.SetFallible();
+	loader.RegisterFunction(geohash3);
+	ScalarFunction geohash2("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE}, LogicalType::VARCHAR,
+	                        StGeoHash2Fun);
+	geohash2.SetFallible();
+	loader.RegisterFunction(geohash2);
 
 	// st_pointfromgeohash
-	loader.RegisterFunction(ScalarFunction("st_pointfromgeohash", {LogicalType::VARCHAR}, MakePointStructType(),
-	                                      StPointFromGeohashFun));
+	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType::VARCHAR}, MakePointStructType(),
+	                                  StPointFromGeohashFun);
+	point_from_geohash.SetFallible();
+	loader.RegisterFunction(point_from_geohash);
 
 	// st_geohash_bbox
-	loader.RegisterFunction(ScalarFunction("st_geohash_bbox", {LogicalType::VARCHAR}, MakeBBoxStructType(),
-	                                      StGeohashBBoxFun));
+	ScalarFunction geohash_bbox("st_geohash_bbox", {LogicalType::VARCHAR}, MakeBBoxStructType(), StGeohashBBoxFun);
+	geohash_bbox.SetFallible();
+	loader.RegisterFunction(geohash_bbox);
 
 	// st_geohash_neighbors
-	loader.RegisterFunction(ScalarFunction("st_geohash_neighbors", {LogicalType::VARCHAR},
-	                                      LogicalType::LIST(LogicalType::VARCHAR), StGeohashNeighborsFun));
+	ScalarFunction geohash_neighbors("st_geohash_neighbors", {LogicalType::VARCHAR},
+	                                 LogicalType::LIST(LogicalType::VARCHAR), StGeohashNeighborsFun);
+	geohash_neighbors.SetFallible();
+	loader.RegisterFunction(geohash_neighbors);
 }
 
 void PintailExtension::Load(ExtensionLoader &loader) {

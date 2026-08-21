@@ -38,6 +38,8 @@ types not listed here.
 - **Signature**: `st_geohash_neighbors(hash VARCHAR) -> VARCHAR[]`
 - **Behavior**:
   - Returns a `LIST` of 8 adjacent Geohash cells at the same resolution, ordered `[N, NE, E, SE, S, SW, W, NW]`.
+  - Adjacency follows the geohash-js cylindrical grid convention: east/west wrap at the antimeridian,
+    and north/south wrap across the poles (for example, the north neighbor of `upb` is `h00`).
   - Invalid Base32 characters raise `Invalid Input Error`.
 
 ---
@@ -45,6 +47,8 @@ types not listed here.
 ### Semantics shared by all functions
 - **NULL propagation**: any `NULL` input ⇒ `NULL` output (standard SQL 3-valued logic).
 - **Error style**: invalid inputs raise DuckDB query errors (`Invalid Input Error` / Out-of-range), never crash the process.
+- **Geohash input length**: decoding and neighbor functions accept lengths `[1, 20]`; other lengths raise
+  `Invalid Input Error`.
 - **Determinism**: all functions are deterministic and side-effect free.
 
 ---
