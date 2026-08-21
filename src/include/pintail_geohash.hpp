@@ -136,20 +136,21 @@ inline GeohashBBox GeohashDecodeBBox(const std::string &geohash) {
 	return GeohashBBox {lat_lo, lon_lo, lat_hi, lon_hi};
 }
 
-//! Adjacent-cell direction indices (matches the public ORDER: N, NE, E, SE, S, SW, W, NW).
-enum GeohashDirection : int32_t {
-	GEOHASH_N = 0,
-	GEOHASH_NE = 1,
-	GEOHASH_E = 2,
-	GEOHASH_SE = 3,
-	GEOHASH_S = 4,
-	GEOHASH_SW = 5,
-	GEOHASH_W = 6,
-	GEOHASH_NW = 7,
-};
-
 //! Cardinal-direction code for the base adjacent() step: 0=N, 1=S, 2=E, 3=W.
+//! Distinct from GeohashNeighborSlot, which indexes the 8-cell public output array.
 enum GeohashCardinal : int32_t { GEOHASH_CARD_N = 0, GEOHASH_CARD_S = 1, GEOHASH_CARD_E = 2, GEOHASH_CARD_W = 3 };
+
+//! Output slot indices for GeohashNeighbors, in the public order N, NE, E, SE, S, SW, W, NW.
+enum GeohashNeighborSlot : int32_t {
+	GEOHASH_SLOT_N = 0,
+	GEOHASH_SLOT_NE = 1,
+	GEOHASH_SLOT_E = 2,
+	GEOHASH_SLOT_SE = 3,
+	GEOHASH_SLOT_S = 4,
+	GEOHASH_SLOT_SW = 5,
+	GEOHASH_SLOT_W = 6,
+	GEOHASH_SLOT_NW = 7,
+};
 
 namespace {
 
@@ -208,16 +209,16 @@ inline void GeohashNeighbors(const std::string &geohash, std::string out[8]) {
 		throw InvalidInputException("Geohash string must not be empty");
 	}
 
-	out[GEOHASH_N] = GeohashAdjacent(geohash, GEOHASH_CARD_N);
-	out[GEOHASH_E] = GeohashAdjacent(geohash, GEOHASH_CARD_E);
-	out[GEOHASH_S] = GeohashAdjacent(geohash, GEOHASH_CARD_S);
-	out[GEOHASH_W] = GeohashAdjacent(geohash, GEOHASH_CARD_W);
+	out[GEOHASH_SLOT_N] = GeohashAdjacent(geohash, GEOHASH_CARD_N);
+	out[GEOHASH_SLOT_E] = GeohashAdjacent(geohash, GEOHASH_CARD_E);
+	out[GEOHASH_SLOT_S] = GeohashAdjacent(geohash, GEOHASH_CARD_S);
+	out[GEOHASH_SLOT_W] = GeohashAdjacent(geohash, GEOHASH_CARD_W);
 
 	// Diagonals via composition of cardinal steps.
-	out[GEOHASH_NE] = GeohashAdjacent(out[GEOHASH_N], GEOHASH_CARD_E);
-	out[GEOHASH_SE] = GeohashAdjacent(out[GEOHASH_S], GEOHASH_CARD_E);
-	out[GEOHASH_SW] = GeohashAdjacent(out[GEOHASH_S], GEOHASH_CARD_W);
-	out[GEOHASH_NW] = GeohashAdjacent(out[GEOHASH_N], GEOHASH_CARD_W);
+	out[GEOHASH_SLOT_NE] = GeohashAdjacent(out[GEOHASH_SLOT_N], GEOHASH_CARD_E);
+	out[GEOHASH_SLOT_SE] = GeohashAdjacent(out[GEOHASH_SLOT_S], GEOHASH_CARD_E);
+	out[GEOHASH_SLOT_SW] = GeohashAdjacent(out[GEOHASH_SLOT_S], GEOHASH_CARD_W);
+	out[GEOHASH_SLOT_NW] = GeohashAdjacent(out[GEOHASH_SLOT_N], GEOHASH_CARD_W);
 }
 
 } // namespace duckdb

@@ -216,3 +216,67 @@ query T
 SELECT st_geohash_neighbors(NULL) IS NULL;
 ----
 true
+
+# =============================================================================
+# Constant nested results — STRUCT/LIST children must themselves be CONSTANT.
+# Broadcasting a folded constant across rows forces Flatten; parent-only
+# SetVectorType(CONSTANT_VECTOR) leaves FLAT children and misaligns after reuse.
+# =============================================================================
+
+query R
+SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat') FROM range(3);
+----
+48.01025390625
+48.01025390625
+48.01025390625
+
+query R
+SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lon') FROM range(3);
+----
+-126.01318359375
+-126.01318359375
+-126.01318359375
+
+query R
+SELECT struct_extract(st_geohash_bbox('ezs42'), 'min_lat') FROM range(3);
+----
+42.583984375
+42.583984375
+42.583984375
+
+query T
+SELECT list_sort(st_geohash_neighbors('ezs42'))::VARCHAR FROM range(2);
+----
+[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
+[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
+
+query I
+SELECT COUNT(*) FROM (SELECT unnest(st_geohash_neighbors('ezs42')) FROM range(2));
+----
+16
+
+query R
+SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat') FROM range(8) WHERE range % 2 = 0;
+----
+48.01025390625
+48.01025390625
+48.01025390625
+48.01025390625
+
+query R
+SELECT struct_extract(st_pointfromgeohash(NULL), 'lat') FROM range(2);
+----
+NULL
+NULL
+
+query R
+SELECT struct_extract(st_geohash_bbox(NULL), 'min_lon') FROM range(2);
+----
+NULL
+NULL
+
+query T
+SELECT st_geohash_neighbors(NULL) IS NULL FROM range(2);
+----
+true
+true
