@@ -1,0 +1,16 @@
+/build
+/extension-ci-tools/build
+/configure
+/venv
+.DS_Store
+*.duckdb_extension
+*.duckdb
+.idea
+duckdb_unittest_tempdir
+/test/bin
+CMakeCache.txt
+CMakeFiles
+cmake_install.cmake
+.venv/
+duckdb*.tar.gz
+.cache/
