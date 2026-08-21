@@ -1,5 +1,19 @@
 # name: test/sql/00_load.test
-# description: Verify pintail extension loads successfully
+# description: Verify pintail extension loads successfully and its entry-point function is callable
 # group: [pintail]
 
+# The extension must be loadable via the extension loader (this is the standing gate).
 require pintail
+
+# The placeholder scalar registered by the entry point must actually be callable,
+# proving the extension is not merely loadable but fully functional after LOAD.
+query T
+SELECT pintail('load-smoke');
+----
+pintail 🦆 load-smoke
+
+# The function must also be visible in the catalog.
+query T
+SELECT COUNT(*) >= 1 FROM duckdb_functions() WHERE function_name = 'pintail';
+----
+true
