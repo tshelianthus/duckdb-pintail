@@ -164,3 +164,55 @@ statement error
 SELECT st_pointfromgeohash('invalid!chars');
 ----
 <REGEX>:Invalid Input Error.*Invalid Base32 character.*
+
+# NaN latitude
+statement error
+SELECT st_geohash('NaN'::DOUBLE, 0.0, 5);
+----
+<REGEX>:Out of Range Error.*Latitude out of range.*
+
+# =============================================================================
+# Boundary cells — neighbors are exact (bitwise grid traversal, no clamp/degenerate duplicates)
+# =============================================================================
+
+# 13. North-polar cell 'upb' (lat 89, lon 0, precision 3): 8 distinct neighbors
+query T
+SELECT list_sort(st_geohash_neighbors('upb'))::VARCHAR;
+----
+[5bp, gzx, gzz, h00, h01, up8, up9, upc]
+
+# 14. North pole + antimeridian cell 'zzz': 8 distinct neighbors
+query T
+SELECT list_sort(st_geohash_neighbors('zzz'))::VARCHAR;
+----
+[000, bp8, bpb, pbn, pbp, zzw, zzx, zzy]
+
+# 15. East antimeridian cell 'xbp' (lon 179.5): 8 distinct neighbors
+query T
+SELECT list_sort(st_geohash_neighbors('xbp'))::VARCHAR;
+----
+[2pb, 800, 802, rzy, rzz, xbn, xbq, xbr]
+
+# =============================================================================
+# NULL propagation for STRUCT/LIST-returning functions
+# =============================================================================
+
+query R
+SELECT struct_extract(st_pointfromgeohash(NULL), 'lat');
+----
+NULL
+
+query R
+SELECT struct_extract(st_pointfromgeohash(NULL), 'lon');
+----
+NULL
+
+query R
+SELECT struct_extract(st_geohash_bbox(NULL), 'min_lat');
+----
+NULL
+
+query T
+SELECT st_geohash_neighbors(NULL) IS NULL;
+----
+true

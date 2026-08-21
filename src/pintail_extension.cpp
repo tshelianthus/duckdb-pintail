@@ -42,7 +42,7 @@ inline void StGeoHash2Fun(DataChunk &args, ExpressionState &state, Vector &resul
 	auto &lat = args.data[0];
 	auto &lon = args.data[1];
 	BinaryExecutor::Execute<double, double, string_t>(lat, lon, result, args.size(), [&](double lat_v, double lon_v) {
-		return StringVector::AddString(result, GeohashEncode(lat_v, lon_v, 12));
+		return StringVector::AddString(result, GeohashEncode(lat_v, lon_v, DEFAULT_GEOHASH_PRECISION));
 	});
 }
 
@@ -66,6 +66,9 @@ inline void StPointFromGeohashFun(DataChunk &args, ExpressionState &state, Vecto
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = hdata.sel->get_index(i);
 		if (!hdata.validity.RowIsValid(idx)) {
+			// Initialize child slots to a safe value so no uninitialized data is ever read back.
+			lat_data[i] = 0.0;
+			lon_data[i] = 0.0;
 			FlatVector::SetNull(result, i, true);
 			continue;
 		}
@@ -98,6 +101,10 @@ inline void StGeohashBBoxFun(DataChunk &args, ExpressionState &state, Vector &re
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = hdata.sel->get_index(i);
 		if (!hdata.validity.RowIsValid(idx)) {
+			min_lat_data[i] = 0.0;
+			min_lon_data[i] = 0.0;
+			max_lat_data[i] = 0.0;
+			max_lon_data[i] = 0.0;
 			FlatVector::SetNull(result, i, true);
 			continue;
 		}
@@ -128,6 +135,8 @@ inline void StGeohashNeighborsFun(DataChunk &args, ExpressionState &state, Vecto
 	for (idx_t i = 0; i < count; i++) {
 		auto idx = hdata.sel->get_index(i);
 		if (!hdata.validity.RowIsValid(idx)) {
+			list_entries[i].offset = 0;
+			list_entries[i].length = 0;
 			FlatVector::SetNull(result, i, true);
 			continue;
 		}
