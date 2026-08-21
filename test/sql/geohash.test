@@ -1,30 +1,127 @@
 # name: test/sql/geohash.test
-# description: Test Pintail Geohash functionality (Phase 1)
+# description: Test Pintail geohash functions against PostGIS / Wikipedia authoritative vectors
 # group: [pintail]
-
-mode skip
 
 require pintail
 
-# Test simple encoding
+# =============================================================================
+# st_geohash — encoding
+# =============================================================================
+
+# 1. PostGIS official: ST_GeoHash(ST_Point(-126, 48), 5) = 'c0w3h'
+#    (PostGIS Point is (lon, lat); our st_geohash(lat, lon) → st_geohash(48, -126))
+query T
+SELECT st_geohash(48.0, -126.0, 5);
+----
+c0w3h
+
+# 2. PostGIS official full precision (20 chars) — first 12 chars (our default) must match prefix
+query T
+SELECT st_geohash(48.0, -126.0);
+----
+c0w3hf1s70w3
+
+# 3. Wikipedia/Geohash.org classic: (57.64911, 10.40744) → 'u4pru' at precision 5
+query T
+SELECT st_geohash(57.64911, 10.40744, 5);
+----
+u4pru
+
+# 4. San Francisco (37.7749, -122.4194) at precision 5
+query T
+SELECT st_geohash(37.7749, -122.4194, 5);
+----
+9q8yy
+
+# 5. Shanghai (31.2304, 121.4737) at precision 6 (existing contract vector)
 query T
 SELECT st_geohash(31.2304, 121.4737, 6);
 ----
 wtw3sj
 
-# Test default precision (12)
-query T
+# 6. Default precision is 12
+query I
 SELECT length(st_geohash(31.2304, 121.4737));
 ----
 12
 
-# Test decoding to struct
-query I
-SELECT st_pointfromgeohash('wtw3sj');
+# 7. Boundary: equator + prime meridian (0, 0) → 's0000'
+query T
+SELECT st_geohash(0.0, 0.0, 5);
 ----
-{'lat': 31.23138427734375, 'lon': 121.47308349609375}
+s0000
 
-# Test NULL propagation
+# =============================================================================
+# st_pointfromgeohash — decoding (center point)
+# =============================================================================
+
+# 8. PostGIS official: ST_PointFromGeoHash('9qqj7nmxncgyy4d0dbxqz0') = POINT(-115.172816 36.114646)
+query R
+SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxqz0'), 'lat'), 6);
+----
+36.114646
+
+query R
+SELECT round(struct_extract(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxqz0'), 'lon'), 6);
+----
+-115.172816
+
+# 9. PostGIS c0w3h cell center (lat 48.01025390625, lon -126.01318359375)
+query R
+SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lat');
+----
+48.01025390625
+
+query R
+SELECT struct_extract(st_pointfromgeohash('c0w3h'), 'lon');
+----
+-126.01318359375
+
+# =============================================================================
+# st_geohash_bbox — bounding box
+# =============================================================================
+
+# 10. Wikipedia ezs42 bbox: lat [42.583984375, 42.626953125], lon [-5.625, -5.5810546875]
+query R
+SELECT struct_extract(st_geohash_bbox('ezs42'), 'min_lat');
+----
+42.583984375
+
+query R
+SELECT struct_extract(st_geohash_bbox('ezs42'), 'max_lat');
+----
+42.626953125
+
+query R
+SELECT struct_extract(st_geohash_bbox('ezs42'), 'min_lon');
+----
+-5.625
+
+query R
+SELECT struct_extract(st_geohash_bbox('ezs42'), 'max_lon');
+----
+-5.5810546875
+
+# =============================================================================
+# st_geohash_neighbors — 8 adjacent cells
+# =============================================================================
+
+# 11. Neighbors of ezs42 (Wikipedia example, precision 5)
+query T
+SELECT list_sort(st_geohash_neighbors('ezs42'))::VARCHAR;
+----
+[ezefp, ezefr, ezefx, ezs40, ezs41, ezs43, ezs48, ezs49]
+
+# 12. Neighbors of shanghai wtw3sj (precision 6)
+query T
+SELECT list_sort(st_geohash_neighbors('wtw3sj'))::VARCHAR;
+----
+[wtw3eu, wtw3ev, wtw3ey, wtw3sh, wtw3sk, wtw3sm, wtw3sn, wtw3sq]
+
+# =============================================================================
+# NULL propagation
+# =============================================================================
+
 query T
 SELECT st_geohash(NULL, 121.4737, 6);
 ----
@@ -34,3 +131,36 @@ query T
 SELECT st_geohash(31.2304, NULL, 6);
 ----
 NULL
+
+query T
+SELECT st_geohash(31.2304, 121.4737, NULL);
+----
+NULL
+
+# =============================================================================
+# Error handling
+# =============================================================================
+
+# Latitude out of range
+statement error
+SELECT st_geohash(100.0, 0.0, 5);
+----
+<REGEX>:Out of Range Error.*Latitude out of range.*
+
+# Longitude out of range
+statement error
+SELECT st_geohash(0.0, 190.0, 5);
+----
+<REGEX>:Out of Range Error.*Longitude out of range.*
+
+# Precision out of range
+statement error
+SELECT st_geohash(0.0, 0.0, 25);
+----
+<REGEX>:Invalid Input Error.*Geohash precision out of range.*
+
+# Invalid Base32 character
+statement error
+SELECT st_pointfromgeohash('invalid!chars');
+----
+<REGEX>:Invalid Input Error.*Invalid Base32 character.*
