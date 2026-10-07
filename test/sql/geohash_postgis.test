@@ -126,6 +126,59 @@ SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(POLYGON EMP
 ----
 true
 
+# Precision/CRS validation precedes empty detection for non-NULL inputs.
+statement error
+SELECT st_geohash('POINT EMPTY'::GEOMETRY, -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('POINT EMPTY'::GEOMETRY, 21);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('GEOMETRYCOLLECTION EMPTY'::GEOMETRY, -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(POLYGON EMPTY))'::GEOMETRY, 21);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'), 5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('GEOMETRYCOLLECTION EMPTY'::GEOMETRY, 'EPSG:4269'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('MULTIPOINT EMPTY'::GEOMETRY, 'EPSG:4269'), 5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+# When both precision and CRS are illegal, precision is reported first.
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'), -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+# Accepted CRS on an empty geometry still yields NULL (empty after validation).
+query I
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:4326')) IS NULL AND st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'OGC:CRS84'), 5) IS NULL;
+----
+true
+
 query I
 SELECT st_geohash('POINT Z(-126 48 7)'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
 ----
