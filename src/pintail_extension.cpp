@@ -210,66 +210,111 @@ static LogicalType MakeBBoxStructType() {
 	return LogicalType::STRUCT(children);
 }
 
+static void RegisterDocumentedScalar(ExtensionLoader &loader, ScalarFunction function, const char *description,
+                                     std::initializer_list<const char *> examples = {}) {
+	if (loader.TryGetFunction(function.name)) {
+		loader.AddFunctionOverload(std::move(function));
+		return;
+	}
+	CreateScalarFunctionInfo info(std::move(function));
+	FunctionDescription function_description;
+	function_description.description = description;
+	for (auto example : examples) {
+		function_description.examples.emplace_back(example);
+	}
+	info.descriptions.push_back(std::move(function_description));
+	loader.RegisterFunction(std::move(info));
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
 	// Phase 0 canary
-	loader.RegisterFunction(
-	    ScalarFunction("pintail", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PintailScalarFun));
+	RegisterDocumentedScalar(loader,
+	                        ScalarFunction("pintail", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PintailScalarFun),
+	                        "Internal load-path smoke function; returns a Pintail diagnostic string.",
+	                        {"pintail('load-smoke')"});
 
 	// st_geohash
 	ScalarFunction geohash3("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::INTEGER},
 	                        LogicalType::VARCHAR, StGeoHash3Fun);
 	geohash3.SetFallible();
-	loader.RegisterFunction(geohash3);
+	RegisterDocumentedScalar(loader, std::move(geohash3),
+	                        "Encode latitude and longitude as a standard Geohash Base32 string.",
+	                        {"st_geohash(31.2304, 121.4737, 6)"});
 	ScalarFunction geohash2("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE}, LogicalType::VARCHAR,
 	                        StGeoHash2Fun);
 	geohash2.SetFallible();
-	loader.RegisterFunction(geohash2);
+	RegisterDocumentedScalar(loader, std::move(geohash2),
+	                        "Encode latitude and longitude using the default Geohash precision.",
+	                        {"st_geohash(31.2304, 121.4737)"});
 
 	ScalarFunction geohash_geom("st_geohash", {LogicalType::GEOMETRY()}, LogicalType::VARCHAR,
 	                            GeometryGeoHashFunction, BindGeometryGeoHash);
 	geohash_geom.SetFallible();
-	loader.RegisterFunction(geohash_geom);
+	RegisterDocumentedScalar(loader, std::move(geohash_geom),
+	                        "Encode the smallest Geohash cell containing a geometry's complete XY extent.",
+	                        {"st_geohash('LINESTRING(-126 48, -126.1 48.1)'::GEOMETRY)"});
 	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(), LogicalType::INTEGER},
 	                                 LogicalType::VARCHAR, GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
 	geohash_geom_prec.SetFallible();
-	loader.RegisterFunction(geohash_geom_prec);
+	RegisterDocumentedScalar(loader, std::move(geohash_geom_prec),
+	                        "Encode a geometry extent as a Geohash with an optional maximum character count.",
+	                        {"st_geohash('POINT(121.4737 31.2304)'::GEOMETRY, 6)"});
 
 	// st_pointfromgeohash
 	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
 	                                  PointFromGeohashFunction);
 	point_from_geohash.SetFallible();
-	loader.RegisterFunction(point_from_geohash);
+	RegisterDocumentedScalar(loader, std::move(point_from_geohash),
+	                        "Decode a Geohash to the center point of its cell.",
+	                        {"st_pointfromgeohash('wtw3sj')"});
 	ScalarFunction point_from_geohash_prec("st_pointfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
 	                                       Geometry4326(), PointFromGeohashPrecisionFunction);
 	point_from_geohash_prec.SetFallible();
-	loader.RegisterFunction(point_from_geohash_prec);
+	RegisterDocumentedScalar(loader, std::move(point_from_geohash_prec),
+	                        "Decode a Geohash prefix to the center point of the selected cell.",
+	                        {"st_pointfromgeohash('wtw3sj-extra', 6)"});
 
 	// st_geomfromgeohash
 	ScalarFunction geom_from_geohash("st_geomfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
 	                                 GeomFromGeohashFunction);
 	geom_from_geohash.SetFallible();
-	loader.RegisterFunction(geom_from_geohash);
+	RegisterDocumentedScalar(loader, std::move(geom_from_geohash),
+	                        "Decode a Geohash to the polygon boundary of its cell.",
+	                        {"st_geomfromgeohash('c0w3h')"});
 	ScalarFunction geom_from_geohash_prec("st_geomfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
 	                                      Geometry4326(), GeomFromGeohashPrecisionFunction);
 	geom_from_geohash_prec.SetFallible();
-	loader.RegisterFunction(geom_from_geohash_prec);
+	RegisterDocumentedScalar(loader, std::move(geom_from_geohash_prec),
+	                        "Decode a Geohash prefix to the polygon boundary of its cell.",
+	                        {"st_geomfromgeohash('c0w3h-extra', 5)"});
 
 	// Core has no PostgreSQL BOX2D; the compatible name aliases the existing STRUCT.
 	for (const auto *name : {"st_geohash_bbox", "st_box2dfromgeohash"}) {
 		ScalarFunction bbox(name, {LogicalType::VARCHAR}, MakeBBoxStructType(), GeoHashBBoxFunction<false>);
 		bbox.SetFallible();
-		loader.RegisterFunction(bbox);
+		const bool is_box2d_alias = string(name) == "st_box2dfromgeohash";
+		RegisterDocumentedScalar(loader, std::move(bbox),
+		                        is_box2d_alias ? "Decode a Geohash to a BOX2D-compatible latitude/longitude bounding box."
+		                                       : "Decode a Geohash to its latitude/longitude bounding box.",
+		                        {is_box2d_alias ? "st_box2dfromgeohash('ezs42')" : "st_geohash_bbox('ezs42')"});
 		ScalarFunction bbox_prec(name, {LogicalType::VARCHAR, LogicalType::INTEGER}, MakeBBoxStructType(),
 		                         GeoHashBBoxFunction<true>);
 		bbox_prec.SetFallible();
-		loader.RegisterFunction(bbox_prec);
+		RegisterDocumentedScalar(loader, std::move(bbox_prec),
+		                        is_box2d_alias
+		                            ? "Decode a Geohash prefix to a BOX2D-compatible latitude/longitude bounding box."
+		                            : "Decode a Geohash prefix to its latitude/longitude bounding box.",
+		                        {is_box2d_alias ? "st_box2dfromgeohash('ezs42-extra', 5)"
+		                                        : "st_geohash_bbox('ezs42-extra', 5)"});
 	}
 
 	// st_geohash_neighbors
 	ScalarFunction geohash_neighbors("st_geohash_neighbors", {LogicalType::VARCHAR},
 	                                 LogicalType::LIST(LogicalType::VARCHAR), StGeohashNeighborsFun);
 	geohash_neighbors.SetFallible();
-	loader.RegisterFunction(geohash_neighbors);
+	RegisterDocumentedScalar(loader, std::move(geohash_neighbors),
+	                        "Return the eight adjacent Geohash cells in [N, NE, E, SE, S, SW, W, NW] order.",
+	                        {"st_geohash_neighbors('ezs42')"});
 }
 
 void PintailExtension::Load(ExtensionLoader &loader) {
