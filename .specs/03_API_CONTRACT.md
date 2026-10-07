@@ -1,4 +1,4 @@
-# API Contract Specification (v0.1.0 MVP)
+# API Contract Specification (Geohash parity revision)
 
 All functions are registered into DuckDB's default catalog upon `LOAD pintail;`.
 This contract is **language-agnostic**: the SQL surface below is identical regardless of
@@ -11,11 +11,31 @@ types not listed here.
 - **Signature**:
   - `st_geohash(lat DOUBLE, lon DOUBLE, precision INTEGER) -> VARCHAR`
   - `st_geohash(lat DOUBLE, lon DOUBLE) -> VARCHAR` (Default precision = 12)
+  - `st_geohash(geom GEOMETRY) -> VARCHAR`
+  - `st_geohash(geom GEOMETRY, maxchars INTEGER) -> VARCHAR`
 - **Behavior**:
   - Encodes `(lat, lon)` into a standard Geohash Base32 string (`0123456789bcdefghjkmnpqrstuvwxyz`).
   - Latitude valid range: `[-90.0, 90.0]`. Out of bounds raises `Out of Range Error`.
   - Longitude valid range: `[-180.0, 180.0]`. Out of bounds raises `Out of Range Error`.
-  - Precision valid range: `[1, 20]` (standard Geohash maximum). Default is 12.
+  - Coordinate-overload precision valid range: `[1, 20]`, default 12. This is Pintail's
+    encoding limit, not a universal Geohash maximum.
+  - Geometry overloads return the smallest Geohash cell containing the **entire geometry**,
+    within a maximum of 20 characters. A positive `maxchars` limits the result to at most that
+    many characters; omitted or zero means automatic precision (up to 20). Negative or >20
+    values raise `Invalid Input Error`. POINT and any coincident XY extent can reach 20 characters.
+  - Supported Core types: POINT, LINESTRING, POLYGON, their MULTI variants and
+    GEOMETRYCOLLECTION, including nested collections and Z/M variants. Only XY participates.
+    Fully empty geometries/collections return NULL; empty members contribute no extent.
+    Precision/CRS validation precedes empty detection for non-NULL inputs.
+  - Geometry XY must be finite longitude/latitude within the ranges above. Z/M are ignored.
+    Coordinates are always x=longitude, y=latitude. An untagged GEOMETRY asserts geographic XY.
+    Tagged geometry must identify as EPSG:4326 or OGC:CRS84; other CRS tags raise
+    `Invalid Input Error`. No CRS transformation or axis reordering occurs.
+  - The extent is Cartesian: a line from -179 to +179 crosses most of the world. No shortest
+    antimeridian arc or polar normalization is inferred. ±180 and ±90 are inclusive.
+  - Cell boundaries are closed. If an extent fits two cells on a partition boundary, choose
+    the upper (east/north) one. When no nonempty prefix covers it, return `''` (the world).
+    Finite point coordinates choose east/north at exact partition midpoints.
 
 ---
 
@@ -43,7 +63,9 @@ types not listed here.
 ---
 
 ### 4. `st_geohash_bbox`
-- **Signature**: `st_geohash_bbox(hash VARCHAR) -> STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)`
+- **Signatures**:
+  - `st_geohash_bbox(hash VARCHAR) -> STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)`
+  - `st_geohash_bbox(hash VARCHAR, precision INTEGER) ->` the same STRUCT
 - **Behavior**:
   - Decodes a Geohash string and returns its bounding-box boundaries.
 
@@ -59,15 +81,31 @@ types not listed here.
 
 ---
 
+### 6. `st_box2dfromgeohash`
+- **Signatures**:
+  - `st_box2dfromgeohash(hash VARCHAR) -> STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)`
+  - `st_box2dfromgeohash(hash VARCHAR, precision INTEGER) ->` the same STRUCT
+- An alias of `st_geohash_bbox`, with identical fields and precision rules. DuckDB Core has
+  no PostgreSQL BOX2D type. This compatible function name intentionally returns Pintail's
+  existing STRUCT; it does not promise BOX2D casts, operators, or text formatting.
+
+---
+
 ### Semantics shared by all functions
 - **NULL propagation**: any `NULL` input ⇒ `NULL` output (standard SQL 3-valued logic).
 - **Error style**: invalid inputs raise DuckDB query errors (`Invalid Input Error` / Out-of-range), never crash the process.
-- **Geohash input length**: decoding and neighbor functions accept lengths `[1, 20]`; other lengths raise
+- **Decode inputs** (point, polygon, bbox and BOX2D alias): accept any length, including
+  `''` (world). ASCII uppercase/lowercase Base32 are equivalent. Omitted or negative precision
+  uses the full string; precision above the string length clamps to that length; zero decodes
+  no characters and returns the world (center POINT(0 0), polygon or bbox). Only the consumed
+  prefix is validated, so an invalid suffix is ignored at shorter precision. Embedded NUL and
+  non-ASCII bytes in the consumed prefix are invalid. Very long strings can collapse the cell
+  bounds under double rounding; no minimum nonzero cell width is promised.
+- **Neighbors** retain their existing stricter input: lowercase Base32, lengths `[1, 20]`.
+  Empty/world hashes have no finite-resolution neighbors. Invalid length/character raises
   `Invalid Input Error`.
-- **Decode precision**: when omitted, `st_pointfromgeohash` and `st_geomfromgeohash` use the complete
-  input Geohash. When specified, only the first `precision` characters are decoded. The valid range is
-  `[1, hash.length]`; values outside that range raise `Invalid Input Error`. The input itself must still
-  satisfy the shared Geohash length and Base32 validation rules.
+- **NULL precision** deliberately propagates NULL for every Pintail overload; unlike PostGIS
+  decode, it is not an alias for omitted precision.
 - **Determinism**: all functions are deterministic and side-effect free.
 
 ---
@@ -78,30 +116,14 @@ types not listed here.
 `STRUCT(lat DOUBLE, lon DOUBLE)`. SQL that accesses `.lat` or `.lon` must migrate to the geometry
 interface (for example `st_astext` or `st_aswkb`). No compatibility STRUCT overload is provided.
 
----
 
-## Axis-Order Convention (`always_xy`) — reserved for Tier 1
+## PostGIS compatibility policy
 
-### Purpose
-`always_xy` is an **optional** `BOOLEAN` parameter that explicitly declares the coordinate-axis
-order of input geometries. It is a reserved cross-cutting convention for the Tier-1 geometry / CRS
-surface (such as coordinate transforms and WKT/GeoJSON (de)serialization); it is **not** applicable
-to the Tier-0 grid functions above. Tier-0 Geohash geometry outputs have the fixed, explicit order
-`x = longitude`, `y = latitude`.
-
-### Contract
-- **Signature form** (future functions may add this trailing optional argument):
-  `some_func(geom …, always_xy BOOLEAN)` with default `always_xy = false`.
-- **`always_xy = TRUE`**: treat all input coordinates as `(longitude, latitude)` order, i.e.
-  `(x, y)` / `(lon, lat)` order.
-- **`always_xy = FALSE`** (default): follow the axis order defined by the coordinate reference
-  system (CRS), e.g. EPSG:4326 defaults to latitude-first, consistent with the OGC Simple Features
-  / ISO 19125 standard.
-- **Design intent**: maximize interoperability with `(lon, lat)`-native systems (e.g. PostGIS,
-  GeoJSON) without breaking the standards-first principle at the core of the DuckDB Spatial
-  extension.
-
-### Non-goals (Tier 0)
-- The five grid functions (`st_geohash`, `st_pointfromgeohash`, `st_geomfromgeohash`, `st_geohash_bbox`,
-  `st_geohash_neighbors`) do **not** accept `always_xy`; adding it there would be semantically
-  redundant and disruptive. Apply it only when Tier 1 introduces CRS-aware `GEOMETRY` functions.
+The reference is PostGIS official documentation and source snapshot
+`33904db915bb3c2ff0f23a69f047bfdb5b93fcc0` (2026-10-07). Detailed function/edge matrix,
+source links and executable comparison provenance: `docs/geohash-postgis-parity.md`.
+Pintail follows the documented whole-geometry containment promise even with positive maxchars;
+PostGIS's source currently encodes the bbox center at the requested positive length, which can
+violate that promise. Pintail also caps encoding at 20, rejects negative geometry maxchars,
+checks tagged CRS, keeps strict NULL propagation, and tags decode geometry EPSG:4326 (PostGIS
+returns unknown SRID). These are deliberate differences, not full binary/API equivalence.
