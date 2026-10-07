@@ -23,7 +23,7 @@ LOAD './build/release/extension/pintail/pintail.duckdb_extension';
 ## Requirements
 
 - DuckDB **v1.5.5** (pinned by this repository's `duckdb` submodule and CI matrix)
-- A C++17 compiler, CMake, and Make
+- A C++17 compiler, CMake >= 3.8, and Make
 - Git, for submodules
 
 ## SQL Functions
@@ -32,10 +32,11 @@ All functions are registered into the default catalog on `LOAD pintail;`. Any `N
 
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
-| `st_geohash` | `(lat DOUBLE, lon DOUBLE [, precision INTEGER])` | `VARCHAR` |
+| `st_geohash` | `(lat DOUBLE, lon DOUBLE [, precision INTEGER])` or `(geom GEOMETRY [, maxchars INTEGER])` | `VARCHAR` |
 | `st_pointfromgeohash` | `(hash VARCHAR [, precision INTEGER])` | `GEOMETRY(EPSG:4326)` |
 | `st_geomfromgeohash` | `(hash VARCHAR [, precision INTEGER])` | `GEOMETRY(EPSG:4326)` |
-| `st_geohash_bbox` | `(hash VARCHAR)` | `STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)` |
+| `st_geohash_bbox` | `(hash VARCHAR [, precision INTEGER])` | `STRUCT(min_lat DOUBLE, min_lon DOUBLE, max_lat DOUBLE, max_lon DOUBLE)` |
+| `st_box2dfromgeohash` | `(hash VARCHAR [, precision INTEGER])` | Same bbox STRUCT (Core has no PostgreSQL BOX2D) |
 | `st_geohash_neighbors` | `(hash VARCHAR)` | `VARCHAR[]` |
 
 ### `st_geohash`
@@ -48,6 +49,15 @@ Encodes `(lat, lon)` into a standard Geohash Base32 string (`0123456789bcdefghjk
 - Out-of-range coordinates (including NaN and ±Infinity) raise `Out of Range Error`
 - Out-of-range precision raises `Invalid Input Error`
 
+Geometry input returns the smallest cell containing the whole geometry, capped at 20 characters.
+Omitted/zero `maxchars` selects automatic precision; positive values `[1,20]` cap the length.
+Empty geometry returns NULL; global extents can return `''`. Core POINT/LINESTRING/POLYGON,
+MULTI variants and collections are supported, including Z/M (XY only). Input uses x=longitude,
+y=latitude; untagged geographic XY, EPSG:4326 and OGC:CRS84 are accepted. Other CRS tags are
+rejected. No transformation or antimeridian reinterpretation occurs. Use Core `st_setcrs(g,
+'EPSG:4326')` to attach known metadata when compact CRS type casts cannot be resolved without
+a CRS provider; setting metadata assumes the coordinates already use that CRS.
+
 ### `st_pointfromgeohash`
 
 Decodes a Geohash string to the center `POINT` of its cell.
@@ -56,8 +66,8 @@ Decodes a Geohash string to the center `POINT` of its cell.
 
 Decodes a Geohash string to the boundary `POLYGON` of its cell. Geometry coordinates always use
 `x = longitude`, `y = latitude`, with CRS `EPSG:4326`. Omitting `precision` uses the complete hash;
-specifying it decodes the first `precision` characters, where `precision` must be in
-`[1, hash.length]`.
+negative precision uses the full hash, positive precision is clamped to the hash length,
+and zero selects the world cell. NULL precision returns NULL.
 
 ### `st_geohash_bbox`
 
@@ -67,13 +77,19 @@ Decodes a Geohash string to its cell bounding box.
 
 Returns the 8 adjacent cells at the same resolution, ordered `[N, NE, E, SE, S, SW, W, NW]`. East/west wrap at the antimeridian; north/south wrap across the poles.
 
-Decode and neighbor functions accept Geohash lengths `[1, 20]`. Empty strings, longer strings, and characters outside the Base32 alphabet raise `Invalid Input Error`.
+Decode functions accept empty (world), long and ASCII uppercase hashes; only the consumed
+prefix must be valid Base32. Neighbors retain lowercase lengths `[1,20]`.
+See [PostGIS parity and migration notes](docs/geohash-postgis-parity.md) for deliberate differences,
+including NULL precision, encoding limits, CRS tags and whole-geometry containment.
 
 ## Examples
 
 ```sql
 SELECT st_geohash(31.2304, 121.4737, 6);
 -- wtw3sj
+
+SELECT st_geohash('LINESTRING(-126 48, -126.1 48.1)'::GEOMETRY);
+-- c0w3
 
 SELECT st_astext(st_pointfromgeohash('c0w3h'));
 -- POINT (-126.01318359375 48.01025390625)
@@ -104,9 +120,7 @@ SELECT st_astext(st_pointfromgeohash(grid_id));
 SELECT st_aswkb(st_pointfromgeohash(grid_id));
 ```
 
-DuckDB 1.5.0 and later provide native `GEOMETRY` in Core. Pintail generates WKB directly and does
-not install, load, or link DuckDB Spatial. GEOS/PROJ remain reserved for future topology operations
-or coordinate transformations.
+DuckDB 1.5.0 and later provide native `GEOMETRY` in Core. Pintail generates WKB directly.
 
 ## Local Build & Testing
 
@@ -136,10 +150,23 @@ LOAD './build/debug/extension/pintail/pintail.duckdb_extension';
 SELECT st_geohash(31.2304, 121.4737, 6);
 ```
 
-## Roadmap
+## DuckDB Release Maintenance
 
-- **v0.1.0 (current)**: Tier 0 Geohash grids — including native Core `GEOMETRY` point and polygon decoding. No Spatial, GEOS/GDAL/PROJ.
-- **Later**: S2, Quadkey, and Slippy Map tile helpers; optional Tier 1 topology via vendored GEOS/PROJ.
+DuckDB community extensions are built for the latest stable DuckDB release only. When the next
+release is near (see the [release calendar](https://duckdb.org/release_calendar.html)),
+`duckdb/community-extensions` CI tests extensions against **both** the latest stable release and
+the current `main` branch.
+
+- **Compatible with both** → the new release has no impact (the common case).
+- **Not compatible with both** → maintain two branches (stable / `main`) and record the commit
+  hashes in `docs/community/description.yml` as `repo.ref` (stable) and `repo.ref_next` (`main`).
+  Once the new version ships, `ref_next` is automatically promoted to `ref`.
+- **Trigger**: any change to `description.yml` makes CI run against the latest stable and `main`.
+- **Force on a PR**: add `test_all_stable: true` and `test_all_main: true` to the PR description.
+- **Version locking**: extension binaries are bound to the DuckDB version they were compiled
+  against (a `v0.9.2` binary cannot be used with `v0.10.3`).
+
+Full details: `.specs/04_TESTING_SPEC.md` · [Official docs](https://duckdb.org/community_extensions/development)
 
 ## License
 
