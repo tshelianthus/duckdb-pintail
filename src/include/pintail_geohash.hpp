@@ -2,12 +2,12 @@
 
 // Pure C++ geohash encoding/decoding — no external dependencies (Tier 0).
 // Algorithm follows the standard geohash grid (32-cell Base32, lat interleaved with lon),
-// identical to PostGIS ST_GeoHash / ST_PointFromGeoHash semantics and the Wikipedia/Geohash.org
-// reference. Validated against PostGIS official documentation examples.
+// with the Pintail coverage/precision contract. See docs/geohash-postgis-parity.md
+// for intentional differences from PostGIS.
 //
 //   Base32 alphabet: "0123456789bcdefghjkmnpqrstuvwxyz"   (a,i,l,o excluded)
 //   Valid coordinates: lat in [-90, 90], lon in [-180, 180]
-//   Valid precision: [1, 20]
+//   Coordinate encoding precision: [1, 20]; geometry maxchars: [0, 20] (0=auto)
 
 #include <cmath>
 #include <cstdint>
@@ -15,6 +15,7 @@
 #include <string>
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/helper.hpp"
 
 namespace duckdb {
 
@@ -24,7 +25,7 @@ static constexpr const char *GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 //! Default geohash precision when the caller omits it (per API contract).
 static constexpr int32_t DEFAULT_GEOHASH_PRECISION = 12;
 
-//! Maximum geohash precision (full double-precision resolution).
+//! Pintail encoding/neighbor limit; decode strings may be longer.
 static constexpr int32_t MAX_GEOHASH_PRECISION = 20;
 
 //! Reverse lookup: Base32 character -> 0..31 index, or -1 if invalid.
@@ -37,7 +38,7 @@ inline int32_t GeohashBase32Index(char c) {
 	return -1;
 }
 
-//! Validates the shared input contract for every geohash-consuming function.
+//! Validates the stricter lowercase/length input contract retained by neighbors.
 inline void ValidateGeohash(const std::string &geohash) {
 	if (geohash.empty() || geohash.size() > static_cast<size_t>(MAX_GEOHASH_PRECISION)) {
 		throw InvalidInputException("Geohash length out of range: %llu (must be within [1, 20])",
@@ -111,51 +112,82 @@ struct GeohashBBox {
 	double max_lon;
 };
 
-//! Decodes a geohash string into its bounding box (and validates all characters).
-inline GeohashBBox GeohashDecodeBBox(const std::string &geohash) {
-	ValidateGeohash(geohash);
-
-	double lat_lo = -90.0, lat_hi = 90.0;
-	double lon_lo = -180.0, lon_hi = 180.0;
-	bool even_bit = true;
-
-	for (char c : geohash) {
-		int32_t idx = GeohashBase32Index(c);
-		if (idx < 0) {
-			throw InvalidInputException("Invalid Base32 character in geohash: %s", string(1, c));
+//! Decode the consumed prefix. Empty input/precision zero denotes the world.
+//! Negative precision means full length; a larger positive precision clamps to length.
+inline GeohashBBox GeohashDecodeBBox(const std::string &geohash, int32_t precision = -1) {
+	const size_t length = precision < 0 ? geohash.size() :
+	    MinValue(geohash.size(), static_cast<size_t>(precision));
+	GeohashBBox box {-90.0, -180.0, 90.0, 180.0};
+	bool longitude = true;
+	for (size_t pos = 0; pos < length; pos++) {
+		char c = geohash[pos];
+		if (c >= 'A' && c <= 'Z') {
+			c = static_cast<char>(c + ('a' - 'A'));
 		}
-		for (int32_t i = 4; i >= 0; i--) {
-			int32_t bit = (idx >> i) & 1;
-			if (even_bit) {
-				double mid = (lon_lo + lon_hi) / 2.0;
-				if (bit) {
-					lon_lo = mid;
-				} else {
-					lon_hi = mid;
-				}
+		const int32_t digit = GeohashBase32Index(c);
+		if (digit < 0) {
+			throw InvalidInputException("Invalid Base32 character at geohash byte %llu",
+			                            static_cast<unsigned long long>(pos));
+		}
+		for (int32_t bit = 4; bit >= 0; bit--) {
+			auto &low = longitude ? box.min_lon : box.min_lat;
+			auto &high = longitude ? box.max_lon : box.max_lat;
+			const double mid = (low + high) / 2.0;
+			if ((digit >> bit) & 1) {
+				low = mid;
 			} else {
-				double mid = (lat_lo + lat_hi) / 2.0;
-				if (bit) {
-					lat_lo = mid;
-				} else {
-					lat_hi = mid;
-				}
+				high = mid;
 			}
-			even_bit = !even_bit;
+			longitude = !longitude;
 		}
 	}
-	return GeohashBBox {lat_lo, lon_lo, lat_hi, lon_hi};
+	return box;
 }
 
-//! Truncates a validated geohash to the first `precision` characters.
-//! `precision` must be in `[1, geohash.size()]`; the full input is still validated first.
-inline std::string GeohashPrefix(const std::string &geohash, int32_t precision) {
-	ValidateGeohash(geohash);
-	if (precision < 1 || static_cast<size_t>(precision) > geohash.size()) {
-		throw InvalidInputException("Geohash decode precision out of range: %d (must be within [1, %llu])", precision,
-		                            static_cast<unsigned long long>(geohash.size()));
+//! Validate geographic XY separately from any precision choice.
+inline void ValidateGeographicXY(double lon, double lat) {
+	if (!std::isfinite(lat) || lat < -90 || lat > 90) {
+		throw OutOfRangeException("Latitude out of range: %f (must be finite within [-90, 90])", lat);
 	}
-	return geohash.substr(0, static_cast<size_t>(precision));
+	if (!std::isfinite(lon) || lon < -180 || lon > 180) {
+		throw OutOfRangeException("Longitude out of range: %f (must be finite within [-180, 180])", lon);
+	}
+}
+
+//! Descend closed cells while the entire extent fits. Only complete characters survive.
+//! Independent implementation of the public coverage promise, not a bbox-center approximation.
+inline std::string GeohashEncodeExtent(const GeohashBBox &extent, int32_t maxchars) {
+	if (maxchars < 0 || maxchars > MAX_GEOHASH_PRECISION) {
+		throw InvalidInputException("Geohash geometry precision out of range: %d (must be within [0, 20])", maxchars);
+	}
+	ValidateGeographicXY(extent.min_lon, extent.min_lat);
+	ValidateGeographicXY(extent.max_lon, extent.max_lat);
+	const int32_t limit = maxchars == 0 ? MAX_GEOHASH_PRECISION : maxchars;
+	GeohashBBox cell {-90, -180, 90, 180};
+	std::string hash;
+	hash.reserve(limit);
+	for (int32_t bit = 0, digit = 0; bit < limit * 5; bit++) {
+		const bool longitude = bit % 2 == 0;
+		auto &low = longitude ? cell.min_lon : cell.min_lat;
+		auto &high = longitude ? cell.max_lon : cell.max_lat;
+		const double min = longitude ? extent.min_lon : extent.min_lat;
+		const double max = longitude ? extent.max_lon : extent.max_lat;
+		const double mid = (low + high) / 2;
+		digit <<= 1;
+		if (min >= mid) {
+			low = mid;
+			digit |= 1;
+		} else if (max <= mid) {
+			high = mid;
+		} else {
+			break;
+		}
+		if (bit % 5 == 4) {
+			hash.push_back(GEOHASH_BASE32[digit]);
+			digit = 0;
+		}
+	}
+	return hash;
 }
 
 //! Cardinal-direction code for the base adjacent() step: 0=N, 1=S, 2=E, 3=W.

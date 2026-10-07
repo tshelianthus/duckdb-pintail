@@ -189,26 +189,26 @@ SELECT st_pointfromgeohash('invalid!chars');
 ----
 <REGEX>:Invalid Input Error.*Invalid Base32 character.*
 
-# Decode and neighbor inputs share the encoded precision limit [1, 20].
-statement error
-SELECT st_geohash_bbox('012345678901234567890');
+# Decode accepts long/empty hashes; neighbors retain the strict limit [1, 20].
+query I
+SELECT st_geohash_bbox('012345678901234567890') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
-statement error
-SELECT st_pointfromgeohash('012345678901234567890');
+query I
+SELECT st_pointfromgeohash('012345678901234567890') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
 statement error
 SELECT st_geohash_neighbors('012345678901234567890');
 ----
 <REGEX>:Invalid Input Error.*Geohash length out of range.*
 
-statement error
-SELECT st_pointfromgeohash('');
+query I
+SELECT st_pointfromgeohash('') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
 # NaN latitude
 statement error
