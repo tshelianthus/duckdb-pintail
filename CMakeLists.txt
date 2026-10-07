@@ -12,6 +12,14 @@ project(${TARGET_NAME})
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Core stays C++11 and emits strong copies of static constexpr LogicalType members.
+# This extension is C++17, so GCC emits those ODR-used members as STB_GNU_UNIQUE.
+# aarch64 ld then rejects the clash with libduckdb_static. -fno-gnu-unique makes
+# the extension copies weak so they resolve to Core's definition.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)
+  add_compile_options(-fno-gnu-unique)
+endif()
+
 include_directories(src/include)
 
 set(EXTENSION_SOURCES
