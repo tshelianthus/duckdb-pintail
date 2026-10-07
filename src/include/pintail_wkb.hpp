@@ -13,6 +13,9 @@ namespace duckdb {
 static constexpr idx_t PINTAIL_WKB_POINT_SIZE = 21;
 static constexpr idx_t PINTAIL_WKB_POLYGON_SIZE = 93;
 
+//! Validate all nonempty XY vertices in Core-normalized WKB (Z/M ignored).
+void ValidateGeographicWkb(const string_t &geometry);
+
 //! Little-Endian WKB POINT (type 1): byte order + type + x + y. x = longitude, y = latitude.
 string_t EncodeWkbPoint(Vector &result, double longitude, double latitude);
 

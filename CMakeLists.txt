@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.8)
 
 # Set extension name here
 set(TARGET_NAME pintail)
@@ -8,7 +8,8 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-set(CMAKE_CXX_STANDARD "17" CACHE STRING "C++ standard to enforce")
+# Override the parent Core standard locally; an existing cache entry may still be 11.
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(src/include)

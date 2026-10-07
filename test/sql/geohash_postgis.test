@@ -1,0 +1,600 @@
+# Whole-geometry Geohash contract, including deliberate PostGIS differences.
+require pintail
+
+query I
+SELECT count(*) = 0 FROM duckdb_extensions() WHERE extension_name = 'spatial' AND loaded;
+----
+true
+
+query T
+SELECT st_geohash('POINT(-126 48)'::GEOMETRY);
+----
+c0w3hf1s70w3hf1s70w3
+
+query I
+SELECT st_geohash('POINT(-126 48)'::GEOMETRY,0) = st_geohash('POINT(-126 48)'::GEOMETRY);
+----
+true
+
+query T
+SELECT st_geohash('LINESTRING(-126 48,-126.1 48.1)'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('LINESTRING(-126 48,-126.1 48.1)'::GEOMETRY,20) = 'c0w3' AND st_geohash('LINESTRING(-126 48,-126.1 48.1)'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('POLYGON((-126 48,-126.1 48,-126.1 48.1,-126 48))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('POLYGON((-126 48,-126.1 48,-126.1 48.1,-126 48))'::GEOMETRY,20) = 'c0w3' AND st_geohash('POLYGON((-126 48,-126.1 48,-126.1 48.1,-126 48))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('MULTIPOINT((-126 48),(-126.1 48.1))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('MULTIPOINT((-126 48),(-126.1 48.1))'::GEOMETRY,20) = 'c0w3' AND st_geohash('MULTIPOINT((-126 48),(-126.1 48.1))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('MULTILINESTRING((-126 48,-126.1 48.1))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('MULTILINESTRING((-126 48,-126.1 48.1))'::GEOMETRY,20) = 'c0w3' AND st_geohash('MULTILINESTRING((-126 48,-126.1 48.1))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('MULTIPOLYGON(((-126 48,-126.1 48,-126.1 48.1,-126 48)))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('MULTIPOLYGON(((-126 48,-126.1 48,-126.1 48.1,-126 48)))'::GEOMETRY,20) = 'c0w3' AND st_geohash('MULTIPOLYGON(((-126 48,-126.1 48,-126.1 48.1,-126 48)))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT(-126 48),LINESTRING(-126.1 48.1,-126 48))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT(-126 48),LINESTRING(-126.1 48.1,-126 48))'::GEOMETRY,20) = 'c0w3' AND st_geohash('GEOMETRYCOLLECTION(POINT(-126 48),LINESTRING(-126.1 48.1,-126 48))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query T
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(LINESTRING EMPTY,LINESTRING(-126 48,-126.1 48.1)))'::GEOMETRY);
+----
+c0w3
+
+query I
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(LINESTRING EMPTY,LINESTRING(-126 48,-126.1 48.1)))'::GEOMETRY,20) = 'c0w3' AND st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(LINESTRING EMPTY,LINESTRING(-126 48,-126.1 48.1)))'::GEOMETRY,2) = 'c0';
+----
+true
+
+query I
+SELECT st_geohash('POINT EMPTY'::GEOMETRY) IS NULL AND st_geohash('POINT EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING EMPTY'::GEOMETRY) IS NULL AND st_geohash('LINESTRING EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('POLYGON EMPTY'::GEOMETRY) IS NULL AND st_geohash('POLYGON EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('MULTIPOINT EMPTY'::GEOMETRY) IS NULL AND st_geohash('MULTIPOINT EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('MULTILINESTRING EMPTY'::GEOMETRY) IS NULL AND st_geohash('MULTILINESTRING EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('MULTIPOLYGON EMPTY'::GEOMETRY) IS NULL AND st_geohash('MULTIPOLYGON EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('GEOMETRYCOLLECTION EMPTY'::GEOMETRY) IS NULL AND st_geohash('GEOMETRYCOLLECTION EMPTY'::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(POLYGON EMPTY))'::GEOMETRY) IS NULL AND st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(POLYGON EMPTY))'::GEOMETRY,5) IS NULL;
+----
+true
+
+# Precision/CRS validation precedes empty detection for non-NULL inputs.
+statement error
+SELECT st_geohash('POINT EMPTY'::GEOMETRY, -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('POINT EMPTY'::GEOMETRY, 21);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('GEOMETRYCOLLECTION EMPTY'::GEOMETRY, -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT EMPTY,GEOMETRYCOLLECTION(POLYGON EMPTY))'::GEOMETRY, 21);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'), 5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('GEOMETRYCOLLECTION EMPTY'::GEOMETRY, 'EPSG:4269'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('MULTIPOINT EMPTY'::GEOMETRY, 'EPSG:4269'), 5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+# When both precision and CRS are illegal, precision is reported first.
+statement error
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:3857'), -1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+# Accepted CRS on an empty geometry still yields NULL (empty after validation).
+query I
+SELECT st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'EPSG:4326')) IS NULL AND st_geohash(st_setcrs('POINT EMPTY'::GEOMETRY, 'OGC:CRS84'), 5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('POINT Z(-126 48 7)'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash('POINT M(-126 48 9)'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash('POINT ZM(-126 48 7 9)'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING(-126 48,-126 48)'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash('MULTIPOINT((-126 48),(-126 48))'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash(st_pointfromgeohash('c0w3h'),5) = 'c0w3h';
+----
+true
+
+query I
+SELECT st_geohash(st_setcrs('POINT(-126 48)'::GEOMETRY,'EPSG:4326'),5) = 'c0w3h';
+----
+true
+
+query I
+SELECT st_geohash(st_setcrs('POINT(-126 48)'::GEOMETRY,'OGC:CRS84'),5) = 'c0w3h';
+----
+true
+
+statement error
+SELECT st_geohash(st_setcrs('POINT(1 1)'::GEOMETRY,'EPSG:3857'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT(1 1)'::GEOMETRY,'EPSG:3857'),5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT(1 1)'::GEOMETRY,'EPSG:4269'));
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash(st_setcrs('POINT(1 1)'::GEOMETRY,'EPSG:4269'),5);
+----
+<REGEX>:Invalid Input Error.*CRS.*
+
+statement error
+SELECT st_geohash('POINT(1 1)'::GEOMETRY,-1);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('POINT(1 1)'::GEOMETRY,21);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('POINT(1 1)'::GEOMETRY,2147483647);
+----
+<REGEX>:Invalid Input Error.*precision.*
+
+statement error
+SELECT st_geohash('POINT(181 0)'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+statement error
+SELECT st_geohash('POINT(0 -91)'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+statement error
+SELECT st_geohash('POINT(inf 1)'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+statement error
+SELECT st_geohash('POINT(nan 1)'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+statement error
+SELECT st_geohash('LINESTRING(1 1,nan 2,3 3)'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+statement error
+SELECT st_geohash('GEOMETRYCOLLECTION(POINT(inf 1),POINT(2 2))'::GEOMETRY);
+----
+<REGEX>:Out of Range Error.*
+
+query I
+SELECT st_geohash(NULL::GEOMETRY) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash(NULL::GEOMETRY,5) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('POINT(1 1)'::GEOMETRY,NULL) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash_bbox('c0w3h',NULL) IS NULL;
+----
+true
+
+query I
+SELECT st_box2dfromgeohash(NULL) IS NULL;
+----
+true
+
+query I
+SELECT st_box2dfromgeohash('c0w3h',NULL) IS NULL;
+----
+true
+
+query I
+SELECT st_box2dfromgeohash(NULL,4) IS NULL;
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING(-180 -90,180 90)'::GEOMETRY) = '' AND st_geohash('LINESTRING(-180 -90,180 90)'::GEOMETRY,20) = '';
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING(-179 1,179 1)'::GEOMETRY) = '' AND st_geohash('LINESTRING(-179 1,179 1)'::GEOMETRY,20) = '';
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING(-1 -1,1 1)'::GEOMETRY) = '' AND st_geohash('LINESTRING(-1 -1,1 1)'::GEOMETRY,20) = '';
+----
+true
+
+query I
+SELECT bool_and(st_geohash(st_geomfromgeohash(h)) = lower(h)) FROM (VALUES ('s'),('c0w3h'),('upb'),('h00'),('xbp'),('800'),('0'),('z'),('u4pru')) v(h);
+----
+true
+
+query T
+SELECT st_astext(st_pointfromgeohash('',0));
+----
+POINT (0 0)
+
+query T
+SELECT st_geohash_bbox('',0);
+----
+{'min_lat': -90.0, 'min_lon': -180.0, 'max_lat': 90.0, 'max_lon': 180.0}
+
+query I
+SELECT st_pointfromgeohash('C0W3H') = st_pointfromgeohash('c0w3h') AND st_pointfromgeohash('c0w3h',100) = st_pointfromgeohash('c0w3h') AND st_pointfromgeohash('c0w3h',-7) = st_pointfromgeohash('c0w3h') AND st_pointfromgeohash('c0w3h!',5) = st_pointfromgeohash('c0w3h') AND st_pointfromgeohash('!',0) = st_pointfromgeohash('');
+----
+true
+
+statement error
+SELECT st_pointfromgeohash('c0w3h!',6);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_pointfromgeohash('c0' || chr(0),3);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_pointfromgeohash('中');
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+query I
+SELECT st_geomfromgeohash('C0W3H') = st_geomfromgeohash('c0w3h') AND st_geomfromgeohash('c0w3h',100) = st_geomfromgeohash('c0w3h') AND st_geomfromgeohash('c0w3h',-7) = st_geomfromgeohash('c0w3h') AND st_geomfromgeohash('c0w3h!',5) = st_geomfromgeohash('c0w3h') AND st_geomfromgeohash('!',0) = st_geomfromgeohash('');
+----
+true
+
+statement error
+SELECT st_geomfromgeohash('c0w3h!',6);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_geomfromgeohash('c0' || chr(0),3);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_geomfromgeohash('中');
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+query I
+SELECT st_geohash_bbox('C0W3H') = st_geohash_bbox('c0w3h') AND st_geohash_bbox('c0w3h',100) = st_geohash_bbox('c0w3h') AND st_geohash_bbox('c0w3h',-7) = st_geohash_bbox('c0w3h') AND st_geohash_bbox('c0w3h!',5) = st_geohash_bbox('c0w3h') AND st_geohash_bbox('!',0) = st_geohash_bbox('');
+----
+true
+
+statement error
+SELECT st_geohash_bbox('c0w3h!',6);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_geohash_bbox('c0' || chr(0),3);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_geohash_bbox('中');
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+query I
+SELECT st_box2dfromgeohash('C0W3H') = st_box2dfromgeohash('c0w3h') AND st_box2dfromgeohash('c0w3h',100) = st_box2dfromgeohash('c0w3h') AND st_box2dfromgeohash('c0w3h',-7) = st_box2dfromgeohash('c0w3h') AND st_box2dfromgeohash('c0w3h!',5) = st_box2dfromgeohash('c0w3h') AND st_box2dfromgeohash('!',0) = st_box2dfromgeohash('');
+----
+true
+
+statement error
+SELECT st_box2dfromgeohash('c0w3h!',6);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_box2dfromgeohash('c0' || chr(0),3);
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_box2dfromgeohash('中');
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+query T
+SELECT st_astext(st_pointfromgeohash('9qqj7nmxncgyy4d0dbxqz0',4));
+----
+POINT (-115.13671875 36.123046875)
+
+query T
+SELECT st_astext(st_geomfromgeohash('9qqj7nmxncgyy4d0dbxqz0',4));
+----
+POLYGON ((-115.3125 36.03515625, -115.3125 36.2109375, -114.9609375 36.2109375, -114.9609375 36.03515625, -115.3125 36.03515625))
+
+query I
+SELECT st_box2dfromgeohash('9qqj7nmxncgyy4d0dbxqz0',10) = st_geohash_bbox('9qqj7nmxncgyy4d0dbxqz0',10);
+----
+true
+
+statement ok
+CREATE TABLE gh_batch AS SELECT i, CASE WHEN i%7=0 THEN NULL::GEOMETRY WHEN i%7=1 THEN 'POINT EMPTY'::GEOMETRY ELSE ('POINT(' || (i%350-175) || ' ' || (i%170-85) || ')')::GEOMETRY END g, CASE WHEN i%11=0 THEN NULL ELSE (i%20+1)::INTEGER END p FROM range(10000) t(i);
+
+query I
+SELECT count(*) = 10000 AND count(st_geohash(g)) = count(g) FILTER (WHERE i%7<>1) AND count(st_geohash(g,p)) = count(g) FILTER (WHERE i%7<>1 AND p IS NOT NULL) FROM gh_batch;
+----
+true
+
+query I
+SELECT bool_and(length(st_geohash(g,p)) = p AND st_geohash(g,p) = left(st_geohash(g),p)) FROM gh_batch WHERE i%7>1 AND p IS NOT NULL AND i%3=0;
+----
+true
+
+query I
+SELECT count(st_geohash_bbox(st_geohash(g,p),p)) = count(st_geohash(g,p)) AND bool_and(st_geohash_bbox(st_geohash(g,p),p) = st_geohash_bbox(st_geohash(g,p))) FROM gh_batch;
+----
+true
+
+query I
+SELECT st_geohash_bbox('c0w3h',2) = st_geohash_bbox('c0') FROM range(3);
+----
+true
+true
+true
+
+query I
+SELECT st_geohash_bbox(NULL::VARCHAR,2) IS NULL FROM range(3);
+----
+true
+true
+true
+
+query I
+SELECT bool_and(st_geohash_bbox('c0w3h',p) = st_geohash_bbox(left('c0w3h',p))) FROM (VALUES (0),(1),(3),(5)) t(p);
+----
+true
+
+query I
+SELECT count(st_box2dfromgeohash(st_geohash(g,p),p)) = count(st_geohash(g,p)) AND bool_and(st_box2dfromgeohash(st_geohash(g,p),p) = st_box2dfromgeohash(st_geohash(g,p))) FROM gh_batch;
+----
+true
+
+query I
+SELECT st_box2dfromgeohash('c0w3h',2) = st_box2dfromgeohash('c0') FROM range(3);
+----
+true
+true
+true
+
+query I
+SELECT st_box2dfromgeohash(NULL::VARCHAR,2) IS NULL FROM range(3);
+----
+true
+true
+true
+
+query I
+SELECT bool_and(st_box2dfromgeohash('c0w3h',p) = st_box2dfromgeohash(left('c0w3h',p))) FROM (VALUES (0),(1),(3),(5)) t(p);
+----
+true
+
+query I
+SELECT count(st_geohash_neighbors(st_geohash(g,5))) = count(st_geohash(g,5)) FROM gh_batch WHERE i%3=0;
+----
+true
+
+statement ok
+CREATE TABLE gh_extents AS SELECT i, ((i*17)%340-170)::DOUBLE x0, ((i*13)%160-80)::DOUBLE y0, pow(10,-(i%7)) w FROM range(3000) t(i);
+
+statement ok
+CREATE TABLE gh_cover AS SELECT *, st_geohash(('LINESTRING(' || x0 || ' ' || y0 || ',' || (x0+w) || ' ' || (y0+w) || ')')::GEOMETRY) h FROM gh_extents;
+
+query I
+SELECT bool_and(b.min_lon <= x0 AND b.max_lon >= x0+w AND b.min_lat <= y0 AND b.max_lat >= y0+w) FROM (SELECT *, st_geohash_bbox(h) b FROM gh_cover);
+----
+true
+
+query I
+SELECT count(*) = 0 FROM gh_cover, unnest(string_split('0123456789bcdefghjkmnpqrstuvwxyz','')) a(c) WHERE length(h)<20 AND (st_geohash_bbox(h||c)).min_lon <= x0 AND (st_geohash_bbox(h||c)).max_lon >= x0+w AND (st_geohash_bbox(h||c)).min_lat <= y0 AND (st_geohash_bbox(h||c)).max_lat >= y0+w;
+----
+true
+
+query I
+SELECT bool_and(st_geohash(('LINESTRING(' || x0 || ' ' || y0 || ',' || (x0+w) || ' ' || (y0+w) || ')')::GEOMETRY,2) = left(h,2)) FROM gh_cover;
+----
+true
+
+query T
+SELECT st_geohash(g,5) FROM (VALUES (true,'POINT(-126 48)'::GEOMETRY),(false,'POINT(181 0)'::GEOMETRY)) t(ok,g) WHERE ok;
+----
+c0w3h
+
+# Core normalizes big-endian WKB before Pintail receives it.
+query I
+SELECT st_geohash(st_geomfromwkb(unhex('0000000001C05F8000000000004048000000000000')),5) = 'c0w3h';
+----
+true
+
+query I
+SELECT st_geohash('GEOMETRYCOLLECTION Z(POINT Z EMPTY, POINT Z(-126 48 nan))'::GEOMETRY) = 'c0w3hf1s70w3hf1s70w3';
+----
+true
+
+query I
+SELECT st_geohash('LINESTRING(0 -10,0 -9)'::GEOMETRY) = st_geohash('POLYGON((0 -10,0 -9,0 -10,0 -10))'::GEOMETRY);
+----
+true
+
+query I
+SELECT count(*) = 4 FROM duckdb_functions() WHERE function_name='st_geohash';
+----
+true
+
+query I
+SELECT typeof(st_box2dfromgeohash('c0w3h',3)) = typeof(st_geohash_bbox('c0w3h',3));
+----
+true
+
+query I
+SELECT st_geohash(st_setcrs(NULL::GEOMETRY,'EPSG:3857'),5) IS NULL AND st_geohash('POINT(181 0)'::GEOMETRY,NULL) IS NULL;
+----
+true
+
+# Constant hash with flat precision and NULL validity; flatten/slice a stored nested result.
+statement ok
+CREATE TABLE gh_nested AS SELECT i, st_box2dfromgeohash('C0W3H',CASE WHEN i%9=0 THEN NULL ELSE (i%6)::INTEGER END) b, st_geohash_neighbors('c0w3h') n FROM range(5000) t(i);
+
+query I
+SELECT count(b) = count(*) FILTER (WHERE i%9<>0) AND bool_and(list_count(n)=8) FROM gh_nested WHERE i%2=1;
+----
+true
+
+query I
+SELECT (st_geohash_bbox('c0w3h',NULL)).min_lon IS NULL FROM range(3);
+----
+true
+true
+true
+
+statement error
+SELECT st_geohash_neighbors('C0W3H');
+----
+<REGEX>:Invalid Input Error.*Base32.*
+
+statement error
+SELECT st_geohash_neighbors('');
+----
+<REGEX>:Invalid Input Error.*length.*
+
+# Integer extremes and very long valid hashes are safe decoder inputs.
+query I
+SELECT st_geohash_bbox('c0w3h',-2147483648) = st_geohash_bbox('c0w3h',2147483647) AND st_box2dfromgeohash(repeat('z',10000)).max_lon=180;
+----
+true

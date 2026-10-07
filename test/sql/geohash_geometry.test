@@ -140,61 +140,61 @@ SELECT st_geomfromgeohash('invalid!chars');
 ----
 <REGEX>:Invalid Input Error.*Invalid Base32 character.*
 
-statement error
-SELECT st_pointfromgeohash('');
+query I
+SELECT st_pointfromgeohash('') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
-statement error
-SELECT st_geomfromgeohash('');
+query I
+SELECT st_geomfromgeohash('') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
-statement error
-SELECT st_pointfromgeohash('012345678901234567890');
+query I
+SELECT st_pointfromgeohash('012345678901234567890') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
-statement error
-SELECT st_geomfromgeohash('012345678901234567890');
+query I
+SELECT st_geomfromgeohash('012345678901234567890') IS NOT NULL;
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
-statement error
-SELECT st_pointfromgeohash('wtqnxt9', 0);
+query I
+SELECT st_pointfromgeohash('wtqnxt9', 0) = st_pointfromgeohash('');
 ----
-<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+true
 
-statement error
-SELECT st_geomfromgeohash('wtqnxt9', 0);
+query I
+SELECT st_geomfromgeohash('wtqnxt9', 0) = st_geomfromgeohash('');
 ----
-<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+true
 
-statement error
-SELECT st_pointfromgeohash('wtqnxt9', 8);
+query I
+SELECT st_pointfromgeohash('wtqnxt9', 8) = st_pointfromgeohash('wtqnxt9');
 ----
-<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+true
 
-statement error
-SELECT st_geomfromgeohash('wtqnxt9', 8);
+query I
+SELECT st_geomfromgeohash('wtqnxt9', 8) = st_geomfromgeohash('wtqnxt9');
 ----
-<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+true
 
-statement error
-SELECT st_pointfromgeohash('wtqnxt9', -1);
+query I
+SELECT st_pointfromgeohash('wtqnxt9', -1) = st_pointfromgeohash('wtqnxt9');
 ----
-<REGEX>:Invalid Input Error.*Geohash decode precision out of range.*
+true
 
-# Full-string validation still applies when precision is supplied.
+# Only consumed characters are validated (this prefix still contains invalid 'i').
 statement error
 SELECT st_pointfromgeohash('invalid!chars', 3);
 ----
 <REGEX>:Invalid Input Error.*Invalid Base32 character.*
 
-statement error
-SELECT st_pointfromgeohash('', 1);
+query I
+SELECT st_pointfromgeohash('', 1) = st_pointfromgeohash('');
 ----
-<REGEX>:Invalid Input Error.*Geohash length out of range.*
+true
 
 # =============================================================================
 # NULL propagation

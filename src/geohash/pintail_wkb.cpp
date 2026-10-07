@@ -1,5 +1,8 @@
 #include "pintail_wkb.hpp"
 
+#include "duckdb/common/types/geometry.hpp"
+#include "duckdb/common/helper.hpp"
+
 #include <cstdint>
 #include <cstring>
 
@@ -47,6 +50,69 @@ string_t FinishBlob(string_t blob, idx_t expected_size, idx_t offset) {
 }
 
 } // namespace
+
+// Core extent reduction can hide a NaN vertex among finite ones. This narrow checked
+// scan validates XY; Core still supplies type validation, empty handling and the extent.
+void ValidateGeographicWkb(const string_t &geometry) {
+	const auto data = reinterpret_cast<const_data_ptr_t>(geometry.GetData());
+	const idx_t size = geometry.GetSize();
+	idx_t offset = 0;
+	auto reserve = [&](idx_t bytes) {
+		if (bytes > size - offset) {
+			throw InvalidInputException("Truncated Core geometry WKB");
+		}
+		auto ptr = data + offset;
+		offset += bytes;
+		return ptr;
+	};
+	auto read_u32 = [&]() { return LoadLE<uint32_t>(reserve(4)); };
+	auto vertices = [&](uint32_t count, uint32_t dimensions, bool point) {
+		const idx_t width = dimensions * sizeof(double);
+		if (count > (size - offset) / width) {
+			throw InvalidInputException("Truncated Core geometry vertices");
+		}
+		for (uint32_t i = 0; i < count; i++) {
+			const auto ptr = reserve(width);
+			const double x = LoadLE<double>(ptr);
+			const double y = LoadLE<double>(ptr + sizeof(double));
+			bool empty = point;
+			for (uint32_t d = 0; empty && d < dimensions; d++) {
+				empty = std::isnan(LoadLE<double>(ptr + d * sizeof(double)));
+			}
+			if (!empty) {
+				ValidateGeographicXY(x, y);
+			}
+		}
+	};
+	// Core stores collections as consecutive normalized WKB headers, so no recursion is needed.
+	while (offset < size) {
+		if (*reserve(1) != 1) {
+			throw InvalidInputException("Unsupported Core geometry WKB byte order");
+		}
+		const auto meta = read_u32();
+		const auto type = (meta & 0xFFFF) % 1000;
+		const auto flag = (meta & 0xFFFF) / 1000;
+		if (type < 1 || type > 7 || flag > 3) {
+			throw InvalidInputException("Unsupported Core geometry WKB type");
+		}
+		const uint32_t dimensions = 2 + (flag == 1 || flag == 3) + (flag == 2 || flag == 3);
+		if (type == 1) {
+			vertices(1, dimensions, true);
+		} else if (type == 2) {
+			vertices(read_u32(), dimensions, false);
+		} else if (type == 3) {
+			const auto rings = read_u32();
+			if (rings > (size - offset) / 4) {
+				throw InvalidInputException("Truncated Core geometry rings");
+			}
+			for (uint32_t ring = 0; ring < rings; ring++) {
+				vertices(read_u32(), dimensions, false);
+			}
+		} else {
+			read_u32(); // Core already validated collection member structure on ingestion.
+		}
+	}
+}
 
 string_t EncodeWkbPoint(Vector &result, double longitude, double latitude) {
 	auto blob = StringVector::EmptyString(result, PINTAIL_WKB_POINT_SIZE);
