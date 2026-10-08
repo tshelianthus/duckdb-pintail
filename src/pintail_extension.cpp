@@ -165,7 +165,7 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 	auto min_lon = FlatVector::GetData<double>(*children[1]);
 	auto max_lat = FlatVector::GetData<double>(*children[2]);
 	auto max_lon = FlatVector::GetData<double>(*children[3]);
-	Vector indices(LogicalType::UBIGINT);
+	Vector indices {LogicalType(LogicalTypeId::UBIGINT)};
 	auto emit = [&](string_t hash, int32_t precision, ValidityMask &, idx_t row) -> uint64_t {
 		const auto bbox = GeohashDecodeBBox(hash.GetString(), precision);
 		min_lat[row] = bbox.min_lat;
@@ -201,12 +201,15 @@ inline void StGeohashNeighborsFun(DataChunk &args, ExpressionState &state, Vecto
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
+// Core is built as C++11 while the extension is C++17. Constructing from the
+// enum IDs avoids ODR-using Core's static constexpr LogicalType aliases, which
+// causes duplicate definitions when MinGW links the loadable extension.
 static LogicalType MakeBBoxStructType() {
 	child_list_t<LogicalType> children;
-	children.emplace_back("min_lat", LogicalType::DOUBLE);
-	children.emplace_back("min_lon", LogicalType::DOUBLE);
-	children.emplace_back("max_lat", LogicalType::DOUBLE);
-	children.emplace_back("max_lon", LogicalType::DOUBLE);
+	children.emplace_back("min_lat", LogicalType(LogicalTypeId::DOUBLE));
+	children.emplace_back("min_lon", LogicalType(LogicalTypeId::DOUBLE));
+	children.emplace_back("max_lat", LogicalType(LogicalTypeId::DOUBLE));
+	children.emplace_back("max_lon", LogicalType(LogicalTypeId::DOUBLE));
 	return LogicalType::STRUCT(children);
 }
 
@@ -242,24 +245,28 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Phase 0 canary
 	RegisterDocumentedScalarSet(
 	    loader, "pintail",
-	    {{ScalarFunction("pintail", {LogicalType::VARCHAR}, LogicalType::VARCHAR, PintailScalarFun),
+	    {{ScalarFunction("pintail", {LogicalType(LogicalTypeId::VARCHAR)},
+	                     LogicalType(LogicalTypeId::VARCHAR), PintailScalarFun),
 	      {"arg"},
 	      "Internal load-path smoke function; returns a Pintail diagnostic string.",
 	      {"pintail('load-smoke')"}}},
 	    {"utility"});
 
 	// st_geohash
-	ScalarFunction geohash3("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::INTEGER},
-	                        LogicalType::VARCHAR, StGeoHash3Fun);
+	ScalarFunction geohash3("st_geohash", {LogicalType(LogicalTypeId::DOUBLE), LogicalType(LogicalTypeId::DOUBLE),
+	                                    LogicalType(LogicalTypeId::INTEGER)},
+	                        LogicalType(LogicalTypeId::VARCHAR), StGeoHash3Fun);
 	geohash3.SetFallible();
-	ScalarFunction geohash2("st_geohash", {LogicalType::DOUBLE, LogicalType::DOUBLE}, LogicalType::VARCHAR,
+	ScalarFunction geohash2("st_geohash", {LogicalType(LogicalTypeId::DOUBLE), LogicalType(LogicalTypeId::DOUBLE)},
+	                        LogicalType(LogicalTypeId::VARCHAR),
 	                        StGeoHash2Fun);
 	geohash2.SetFallible();
-	ScalarFunction geohash_geom("st_geohash", {LogicalType::GEOMETRY()}, LogicalType::VARCHAR,
+	ScalarFunction geohash_geom("st_geohash", {LogicalType::GEOMETRY()}, LogicalType(LogicalTypeId::VARCHAR),
 	                            GeometryGeoHashFunction, BindGeometryGeoHash);
 	geohash_geom.SetFallible();
-	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(), LogicalType::INTEGER},
-	                                 LogicalType::VARCHAR, GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
+	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(),
+	                                                 LogicalType(LogicalTypeId::INTEGER)},
+	                                 LogicalType(LogicalTypeId::VARCHAR), GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
 	geohash_geom_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_geohash",
 	                            {{std::move(geohash3),
@@ -280,10 +287,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                              {"st_geohash('POINT(121.4737 31.2304)'::GEOMETRY, 6)"}}});
 
 	// st_pointfromgeohash
-	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
+	ScalarFunction point_from_geohash("st_pointfromgeohash", {LogicalType(LogicalTypeId::VARCHAR)}, Geometry4326(),
 	                                  PointFromGeohashFunction);
 	point_from_geohash.SetFallible();
-	ScalarFunction point_from_geohash_prec("st_pointfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
+	ScalarFunction point_from_geohash_prec("st_pointfromgeohash", {LogicalType(LogicalTypeId::VARCHAR),
+	                                                              LogicalType(LogicalTypeId::INTEGER)},
 	                                       Geometry4326(), PointFromGeohashPrecisionFunction);
 	point_from_geohash_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_pointfromgeohash",
@@ -297,10 +305,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                              {"st_pointfromgeohash('wtw3sj-extra', 6)"}}});
 
 	// st_geomfromgeohash
-	ScalarFunction geom_from_geohash("st_geomfromgeohash", {LogicalType::VARCHAR}, Geometry4326(),
+	ScalarFunction geom_from_geohash("st_geomfromgeohash", {LogicalType(LogicalTypeId::VARCHAR)}, Geometry4326(),
 	                                 GeomFromGeohashFunction);
 	geom_from_geohash.SetFallible();
-	ScalarFunction geom_from_geohash_prec("st_geomfromgeohash", {LogicalType::VARCHAR, LogicalType::INTEGER},
+	ScalarFunction geom_from_geohash_prec("st_geomfromgeohash", {LogicalType(LogicalTypeId::VARCHAR),
+	                                                             LogicalType(LogicalTypeId::INTEGER)},
 	                                      Geometry4326(), GeomFromGeohashPrecisionFunction);
 	geom_from_geohash_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_geomfromgeohash",
@@ -315,10 +324,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Core has no PostgreSQL BOX2D; the compatible name aliases the existing STRUCT.
 	for (const auto *name : {"st_geohash_bbox", "st_box2dfromgeohash"}) {
-		ScalarFunction bbox(name, {LogicalType::VARCHAR}, MakeBBoxStructType(), GeoHashBBoxFunction<false>);
+		ScalarFunction bbox(name, {LogicalType(LogicalTypeId::VARCHAR)}, MakeBBoxStructType(), GeoHashBBoxFunction<false>);
 		bbox.SetFallible();
 		const bool is_box2d_alias = string(name) == "st_box2dfromgeohash";
-		ScalarFunction bbox_prec(name, {LogicalType::VARCHAR, LogicalType::INTEGER}, MakeBBoxStructType(),
+		ScalarFunction bbox_prec(name, {LogicalType(LogicalTypeId::VARCHAR),
+		                               LogicalType(LogicalTypeId::INTEGER)},
+		                         MakeBBoxStructType(),
 		                         GeoHashBBoxFunction<true>);
 		bbox_prec.SetFallible();
 		RegisterDocumentedScalarSet(
@@ -336,8 +347,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	}
 
 	// st_geohash_neighbors
-	ScalarFunction geohash_neighbors("st_geohash_neighbors", {LogicalType::VARCHAR},
-	                                 LogicalType::LIST(LogicalType::VARCHAR), StGeohashNeighborsFun);
+	ScalarFunction geohash_neighbors("st_geohash_neighbors", {LogicalType(LogicalTypeId::VARCHAR)},
+	                                 LogicalType::LIST(LogicalType(LogicalTypeId::VARCHAR)), StGeohashNeighborsFun);
 	geohash_neighbors.SetFallible();
 	RegisterDocumentedScalarSet(
 	    loader, "st_geohash_neighbors",
