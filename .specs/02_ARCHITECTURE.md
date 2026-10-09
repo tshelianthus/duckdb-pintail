@@ -1,11 +1,12 @@
 # Architecture Specification
 
 ## 1. Tech Stack
-- **Language**: **C++17** (matches DuckDB core & official extension-template; C++11 minimum per duckdb-spatial, C++17 preferred).
-- **Build System**: **CMake** (>= 3.5) driven by DuckDB's `extension-ci-tools` makefiles via `make`.
+- **Language**: **C++17** for both Pintail targets. Set the directory-local CMake standard explicitly;
+  do not rely on a cache entry inherited from Core (which can remain C++11).
+- **Build System**: **CMake** (>= 3.8, for C++17 standard support) driven by DuckDB's `extension-ci-tools` makefiles via `make`.
 - **Extension Basis**: the official `duckdb/extension-template` (C++), vendored as the repo scaffolding.
-- **Core Dependencies (Tier 0)**: **none** — pure C++ bit/string math and direct WKB encoding.
-  DuckDB 1.5.0 and later provide native `GEOMETRY` in Core, so Tier 0 may return
+- **External Dependencies**: **none** — pure C++ bit/string math and direct WKB encoding.
+  DuckDB 1.5.0 and later provide native `GEOMETRY` in Core, so Pintail may return
   `GEOMETRY(EPSG:4326)` without installing, loading, or linking DuckDB Spatial.
 
 ## 2. Extension Skeleton (per extension-template)
@@ -17,7 +18,7 @@
 ## 3. Execution & Memory Architecture
 - **Vectorized First**: every scalar function binds a `ScalarFunction` and runs through `UnaryExecutor::Execute` / `TernaryExecutor` / `BinaryExecutor` — batch operation over DuckDB `DataChunk`/`Vector`. No per-row scalar iteration.
 - **Validity Masks**: NULLs propagate via DuckDB's validity mask; any `NULL` argument yields `NULL` without entering the algorithm body (DuckDB executor handles this automatically for simple-type executors).
-- **Zero Panic / Zero Crash**: all validation (lat ∈ [-90, 90], lon ∈ [-180, 180], precision ∈ [1, 20], Base32 charset) raises DuckDB query errors via `InvalidInputException` / `OutOfRangeException`. Never `std::abort`, never UB, never uncaught C++ exceptions.
+- **Zero Panic / Zero Crash**: all validation (lat ∈ [-90, 90], lon ∈ [-180, 180], encoding precision limits, consumed-prefix Base32 charset) raises DuckDB query errors via `InvalidInputException` / `OutOfRangeException`. Never `std::abort`, never UB, never uncaught C++ exceptions.
 
 ## 4. Directory Layout
 ```
@@ -26,7 +27,6 @@ duckdb-pintail/
 ├── .specs/                     # SSD Specifications (this directory)
 ├── extension-ci-tools/         # DuckDB CI/build submodule
 ├── duckdb/                     # DuckDB core submodule (pinned)
-├── third_party/                # (reserved) Tier-1 vendored GEOS/PROJ — empty in Tier 0
 ├── src/
 │   ├── include/
 │   │   ├── pintail_extension.hpp   # PintailExtension class declaration
@@ -39,16 +39,28 @@ duckdb-pintail/
 │   └── sql/                   # SQLLogicTest cases
 ├── CMakeLists.txt             # build_static_extension + build_loadable_extension
 ├── extension_config.cmake     # duckdb_extension_load(pintail ...), version pin
-├── vcpkg.json                 # (Tier 0: empty deps) ; Tier 1: + geos, proj
+├── vcpkg.json                 # no external dependencies
 ├── Makefile                   # EXT_NAME=pintail, includes extension-ci-tools makefile
 └── README.md
 ```
 
-## 5. GEOS / PROJ Integration Point (reserved for Tier 1)
+## 5. Dependency Boundary
 - DuckDB Core's native `GEOMETRY` stores standard WKB and provides basic inspection functions such as
   `ST_AsText`, `ST_AsWKB`, and `ST_CRS`. Pintail writes WKB directly into DuckDB-managed result-vector
-  memory and declares `LogicalType::GEOMETRY("EPSG:4326")`; this is a Tier-0 capability.
-- GEOS/PROJ remain unnecessary until Pintail needs topology operations or coordinate transformations.
-- `CMakeLists.txt` will, in Tier 1, `FetchContent`/vendor GEOS & PROJ under `third_party/`, build them statically, and `target_link_libraries` them into both the static and loadable extension targets — the exact pattern `duckdb-spatial` uses.
-- `vcpkg.json` gains `geos` and `proj` dependencies at that point.
-- No architectural change to the extension skeleton is required; this is purely additive.
+  memory and declares `LogicalType::GEOMETRY("EPSG:4326")`.
+- Pintail does not vendor or link GEOS, PROJ, GDAL, or DuckDB Spatial.
+- Geometry topology, coordinate transformation, and general GIS processing remain outside this
+  extension's architecture and should be handled by DuckDB Spatial.
+
+## Core geometry input and nested results
+
+Use Core Geometry::GetType/GetExtent on normalized WKB, with a bounded byte reader solely to
+validate finite XY vertices that an extent reduction might otherwise hide (NaN mixed with valid
+vertices). Preserve the input CRS type at bind time and validate its identifier without PROJ. Core
+ST_SetCRS can attach compact identifiers without a provider; direct SQL type casts may require
+a provider or a complete CRS definition. No provider is registered or loaded by Pintail.
+The coverage algorithm descends the longitude/latitude grid while the closed extent fits,
+retaining complete Base32 characters up to 20. This is an implementation choice, not the SQL
+contract. Every SQL row is dispatched through UnaryExecutor/BinaryExecutor/TernaryExecutor;
+empty geometry sets output validity via ExecuteWithNulls. Nested STRUCT children share the
+executor's constant/flat layout and validity; LIST offsets are written by UnaryExecutor.

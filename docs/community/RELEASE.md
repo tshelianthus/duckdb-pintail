@@ -47,7 +47,7 @@
 
 ## SQL 参数与发布措辞
 
-本轮功能说明应为“参考 PostGIS，扩展了 Pintail 的 Geohash 功能”。发布说明依据 [API 合同](../../.specs/03_API_CONTRACT.md) 和 [参考行为与差异](../geohash-postgis-parity.md)，不宣称接入 PostGIS 或完全兼容。
+本轮功能说明应为“参考 PostGIS，扩展了 Pintail 的 Geohash 功能”。发布说明依据 [API 合同](../../.specs/03_API_CONTRACT.md) ，不宣称接入 PostGIS 或完全兼容。
 
 | 参数 | 范围与行为 |
 | --- | --- |

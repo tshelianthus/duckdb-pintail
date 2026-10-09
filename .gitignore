@@ -14,3 +14,10 @@ cmake_install.cmake
 .venv/
 duckdb*.tar.gz
 .cache/
+
+# Local research and planning documents
+/.docs/
+
+# Local Reasonix state and configuration
+/.reasonix/
+/reasonix.toml

@@ -45,8 +45,8 @@ Extension identity: name `pintail` (no hyphens); no segfault/panic on load.
 3. `st_pointfromgeohash` produces the exact cell center as `(longitude, latitude)`.
 4. `st_geomfromgeohash` produces a closed five-vertex ring ordered lower-left, upper-left,
    upper-right, lower-right, lower-left.
-5. Full and explicit shorter precision; lengths 1 and 20; invalid characters, empty and overlong
-   strings; precision 0 and precision above input length.
+5. Full/shorter/clamped/negative/zero precision; empty and long strings; consumed-prefix
+   validation and ASCII case-insensitive decode. Neighbors retain strict length/case rules.
 6. NULL propagation for every overload, non-constant batch vectors, polar cells, and antimeridian cells.
 7. Canonical decode vectors compare `st_astext` of both functions against DuckDB Core's
    exact WKT format. Cover at least PostGIS `c0w3h`, Wikipedia `ezs42` / `u4pru`,
@@ -57,3 +57,48 @@ Extension identity: name `pintail` (no hyphens); no segfault/panic on load.
 DuckDB 1.5.0 and later provide native `GEOMETRY` in Core. These tests must not install, load, or link
 DuckDB Spatial. Tier 0 directly emits standard WKB; GEOS/PROJ remain reserved for topology operations
 and coordinate transformations.
+
+
+## Release Compatibility Gate
+
+The project workflow builds the same source against **DuckDB v1.5.5 and v1.5.6**.
+Both version matrices and `Release compatibility gate` must succeed before community
+submission. Repeat the checks on the final `main` commit after merging; the community
+`repo.ref` must identify that verified release source.
+
+Native SQL tests run where supported by the official toolchain. Build-only platform
+jobs, including Wasm, must not be reported as successful SQL test runs. Local Debug
+and Release suites supplement these checks and do not replace the dual-version CI.
+
+See [community release gates](../docs/community/RELEASE.md) for the procedure.
+
+## Two-Branch Testing (DuckDB Version Releases)
+
+The project v1.5.5/v1.5.6 matrix uses one source revision. It does not require a
+separate `repo.ref_next`.
+
+If compatibility with an upcoming DuckDB release requires different source, maintain
+separate stable-targeting and next-release branches. Set `repo.ref` to the stable
+source and `repo.ref_next` to the next-release source, using fixed commit hashes.
+The community workflow controls when the next target is built and the reference is
+promoted; inspect the actual upstream jobs rather than assuming both targets ran.
+PR body text such as `test_all_stable` / `test_all_main` is not a substitute for that
+verification. A current `main` build does not guarantee compatibility with a later
+stable release.
+
+Extension binaries are specific to the DuckDB version they were compiled against.
+The local descriptor is a v0.2.0 candidate; replace its development reference with
+the final verified `main` commit before community submission.
+
+## Whole-geometry encoding and differential gate
+
+`geohash_postgis.test` covers every new overload without Spatial, empty and mixed/nested
+collections, all seven Core types, Z/M, NULLs, CRS validation, invalid/nonfinite XY, precision
+limits, global/polar/antimeridian and degenerate/boundary extents. It checks cell containment,
+maximality at the next character and nonconstant/selected vectors crossing chunk boundaries.
+`geohash_postgis_vectors.test` records official documentation examples and deterministic
+vectors produced by the exact PostGIS source snapshot named in the API contract. No GPL
+source is vendored; the temporary reference runner executes upstream algorithms separately.
+These are source-level differential vectors, not a claim of running a PostgreSQL server.
+Debug build + full SQLLogicTest suite is authoritative; release build/test also validates optimized
+registration and execution. Neither substitutes for the future Community CI platform matrix.
