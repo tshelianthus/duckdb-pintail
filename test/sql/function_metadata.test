@@ -1,0 +1,72 @@
+# name: test/sql/function_metadata.test
+# description: Verify duckdb_functions() exposes parameter names, descriptions, examples, and categories
+# group: [pintail]
+
+require pintail
+
+# Every public Pintail/Geohash overload must expose real parameter names.
+query III
+SELECT function_name, parameters, parameter_types
+FROM duckdb_functions()
+WHERE function_name IN (
+  'pintail',
+  'st_geohash',
+  'st_pointfromgeohash',
+  'st_geomfromgeohash',
+  'st_geohash_bbox',
+  'st_box2dfromgeohash',
+  'st_geohash_neighbors'
+)
+ORDER BY function_name, len(parameter_types), parameter_types::VARCHAR;
+----
+pintail	[arg]	[VARCHAR]
+st_box2dfromgeohash	[hash]	[VARCHAR]
+st_box2dfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+st_geohash	[geom]	[GEOMETRY]
+st_geohash	[lat, lon]	[DOUBLE, DOUBLE]
+st_geohash	[geom, maxchars]	[GEOMETRY, INTEGER]
+st_geohash	[lat, lon, precision]	[DOUBLE, DOUBLE, INTEGER]
+st_geohash_bbox	[hash]	[VARCHAR]
+st_geohash_bbox	[hash, precision]	[VARCHAR, INTEGER]
+st_geohash_neighbors	[hash]	[VARCHAR]
+st_geomfromgeohash	[hash]	[VARCHAR]
+st_geomfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+st_pointfromgeohash	[hash]	[VARCHAR]
+st_pointfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+
+# Geometry overloads must keep their own description instead of inheriting lat/lon text.
+query T
+SELECT description
+FROM duckdb_functions()
+WHERE function_name = 'st_geohash'
+  AND parameter_types::VARCHAR = '[GEOMETRY]'
+----
+Encode the smallest Geohash cell containing a geometry's complete XY extent.
+
+query T
+SELECT description
+FROM duckdb_functions()
+WHERE function_name = 'st_geohash'
+  AND parameter_types::VARCHAR = '[GEOMETRY, INTEGER]'
+----
+Encode a geometry extent as a Geohash with an optional maximum character count.
+
+# Catalog metadata should be complete enough for agent discovery.
+query IIII
+SELECT
+  bool_and(description IS NOT NULL AND description <> '') AS all_described,
+  bool_and(len(examples) > 0) AS all_have_examples,
+  bool_and(len(list_filter(parameters, x -> x LIKE 'col%')) = 0) AS no_placeholder_params,
+  bool_and(len(categories) > 0) AS all_categorized
+FROM duckdb_functions()
+WHERE function_name IN (
+  'pintail',
+  'st_geohash',
+  'st_pointfromgeohash',
+  'st_geomfromgeohash',
+  'st_geohash_bbox',
+  'st_box2dfromgeohash',
+  'st_geohash_neighbors'
+);
+----
+true	true	true	true
