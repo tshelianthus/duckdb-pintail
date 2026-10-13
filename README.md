@@ -179,7 +179,6 @@ SELECT st_aswkb(st_pointfromgeohash(grid_id));
 git clone --branch dev https://github.com/tshelianthus/duckdb-pintail.git
 cd duckdb-pintail
 git submodule update --init --recursive
-make configure
 
 make debug
 make test_debug

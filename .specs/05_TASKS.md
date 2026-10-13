@@ -4,10 +4,10 @@
 - [x] Migrate from `extension-template-rs` (Rust) to the official C++ `extension-template`.
 - [x] Remove all Rust artifacts (`Cargo.toml`, `Cargo.lock`, `src/*.rs`, `.cargo/`).
 - [x] Rename extension target to `pintail` across CMake / Makefile / headers / `extension_config.cmake`.
-- [x] Keep `make configure` + `make debug` + `make test_debug` (00_load.test) green.
+- [x] Keep submodule initialization + `make debug` + `make test_debug` (00_load.test) green.
 
 ## Standing Rule (from Phase 0 onward)
-- [ ] Every commit keeps `make configure` + `make debug` + `make test_debug` green.
+- [ ] Every commit keeps submodule initialization + `make debug` + `make test_debug` green.
 - [ ] Empty / partial feature sets are OK; a broken load entrypoint is not.
 
 ## [x] Phase 1: Geohash Core (MVP, pure C++)

@@ -7,7 +7,7 @@
 1. 在项目 PR 中对同一源码运行两个版本的官方跨平台构建矩阵。原生平台按官方工具链支持运行 SQLLogicTest；Wasm 等平台的构建成功不代表执行过 SQL 测试。
 2. 确认两个版本的所有构建任务和适用的 SQL 测试通过，且 `Release compatibility gate` 成功。失败、取消或未完成均不满足门禁。
 3. 经项目 PR 合并到 `main` 后，再确认合并提交的双版本矩阵和兼容性门禁全部成功。发布引用必须是该已验证提交，不能使用不同源码的历史 CI 结果。
-4. 本地完成 `make configure`、`make debug`、`make test_debug`、`make release`、`make test_release`，记录测试版本、提交和结果。本地单版本通过不能代替双版本 CI。
+4. 本地完成 `git submodule update --init --recursive`、`make debug`、`make test_debug`、`make release`、`make test_release`，记录测试版本、提交和结果。本地单版本通过不能代替双版本 CI。
 5. 创建语义化版本 tag，记录完整 commit SHA，更新描述文件版本与 `repo.ref`，再向社区提交只修改 `extensions/pintail/description.yml` 的 PR。
 6. 等待社区构建、测试与维护者审核完成，再确认实际安装分发结果。各 DuckDB 版本使用针对各自版本构建的二进制。
 

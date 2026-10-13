@@ -5,14 +5,14 @@ All test cases use standard SQLLogicTest format under `test/sql/`, executed by D
 
 ## Build System (C++)
 - Extension must compile with a **C++17** toolchain through CMake + `make`.
-- `make configure` obtains the pinned `duckdb` + `extension-ci-tools` submodules and preps the build.
+- `git submodule update --init --recursive` obtains the pinned `duckdb` + `extension-ci-tools` submodules.
 - `make debug` produces `build/debug/extension/pintail/pintail.duckdb_extension`.
 
 ## Standing Gate: Extension Load Smoke (post-Phase 0)
 Applies to every commit on `dev`/`main` after scaffolding. Feature completeness is irrelevant; the load path must stay green.
 
 **Automatic verification (authoritative)**
-1. `make configure` succeeds.
+1. `git submodule update --init --recursive` succeeds.
 2. `make debug` succeeds and emits `build/debug/extension/pintail/pintail.duckdb_extension`.
 3. `make test_debug` succeeds (runs `test/sql/00_load.test` which validates `require pintail` / loadability).
 

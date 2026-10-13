@@ -61,7 +61,6 @@ pintail.duckdb_extension
 
 ```bash
 git submodule update --init --recursive
-make configure
 make debug
 make test_debug
 make release
