@@ -1,7 +1,7 @@
 extension:
   name: pintail
-  description: Lightweight geospatial indexing functions for DuckDB, including Geohash encoding, GEOMETRY decoding, bounding boxes, and neighbors.
-  version: 0.1.0
+  description: Lightweight Geohash utilities for DuckDB, including coordinate and geometry encoding, cell decoding, bounding boxes, and neighbors.
+  version: 0.2.0
   language: C++
   build: cmake
   license: Apache-2.0
@@ -10,20 +10,30 @@ extension:
 
 repo:
   github: tshelianthus/duckdb-pintail
-  ref: ef5644d2450bcdf269482292e5ab78b7b24dccb3
+  # Candidate source; replace with the final verified main commit before submission.
+  ref: 6c78921783546696d77174b906f0fbef1e6c5f05
 
 docs:
   hello_world: |
     INSTALL pintail FROM community;
     LOAD pintail;
 
-    SELECT st_geohash(31.2304, 121.4737, 6);
+    -- Recommended: GEOMETRY coordinates use longitude, latitude.
+    SELECT st_geohash('POINT(121.4737 31.2304)'::GEOMETRY, 6);
+    -- wtw3sj
 
   extended_description: |
-    Pintail provides focused Geohash utilities for DuckDB. The extension supports
-    latitude/longitude encoding with optional precision, whole-geometry encoding
-    from POINT, LINESTRING, POLYGON, MULTI* and GEOMETRYCOLLECTION XY extents,
-    center-point and cell-polygon decoding, bounding-box decoding, a BOX2D-compatible
-    bounding-box alias, and the eight neighboring cells. Decode geometry uses
-    native Core GEOMETRY with EPSG:4326 coordinates. NULL inputs propagate and
-    invalid coordinates, hashes, and precision values raise query errors.
+    Pintail provides dependency-free Geohash utilities for DuckDB. New support
+    references PostGIS documentation and behavior, with Pintail-specific API
+    choices. Encode points, lines, polygons, multi-geometries, and collections
+    using a Geohash cell that covers the entire geometry. GEOMETRY input is
+    recommended for new queries and uses longitude, latitude; existing numeric
+    calls retain latitude, longitude order.
+
+    Decode Geohashes to cell-center POINTs, cell-boundary POLYGONs, or bounding-box
+    STRUCTs, and find the eight neighboring cells. st_box2dfromgeohash is an alias
+    of st_geohash_bbox and returns the same STRUCT. Function signatures,
+    descriptions, and examples are available through duckdb_functions().
+
+    Geometry functions use DuckDB Core GEOMETRY without requiring Spatial, GEOS,
+    PROJ, or PostGIS. Decoded geometries carry EPSG:4326 coordinates.

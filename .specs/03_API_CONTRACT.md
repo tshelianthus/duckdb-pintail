@@ -120,8 +120,7 @@ interface (for example `st_astext` or `st_aswkb`). No compatibility STRUCT overl
 ## PostGIS compatibility policy
 
 The reference is PostGIS official documentation and source snapshot
-`33904db915bb3c2ff0f23a69f047bfdb5b93fcc0` (2026-10-07). Detailed function/edge matrix,
-source links and executable comparison provenance: `docs/geohash-postgis-parity.md`.
+`33904db915bb3c2ff0f23a69f047bfdb5b93fcc0` (2026-10-07).
 Pintail follows the documented whole-geometry containment promise even with positive maxchars;
 PostGIS's source currently encodes the bbox center at the requested positive length, which can
 violate that promise. Pintail also caps encoding at 20, rejects negative geometry maxchars,

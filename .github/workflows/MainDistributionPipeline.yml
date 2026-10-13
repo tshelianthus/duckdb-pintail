@@ -13,9 +13,30 @@ concurrency:
 
 jobs:
   duckdb-stable-build:
-    name: Build extension binaries
+    name: Build extension binaries (${{ matrix.duckdb_version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - duckdb_version: v1.5.5
+            vcpkg_commit: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
+          - duckdb_version: v1.5.6
+            vcpkg_commit: 84bab45d415d22042bd0b9081aea57f362da3f35
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
-      duckdb_version: v1.5.5
+      duckdb_version: ${{ matrix.duckdb_version }}
       ci_tools_version: v1.5-variegata
       extension_name: pintail
+      vcpkg_commit: ${{ matrix.vcpkg_commit }}
+      skip_tests: false
+
+  release-gate:
+    name: Release compatibility gate
+    if: ${{ always() }}
+    needs: duckdb-stable-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both DuckDB version matrices to pass
+        env:
+          MATRIX_RESULT: ${{ needs.duckdb-stable-build.result }}
+        run: test "$MATRIX_RESULT" = success
