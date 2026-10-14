@@ -10,8 +10,7 @@ extension:
 
 repo:
   github: tshelianthus/duckdb-pintail
-  # Candidate source; replace with the final verified main commit before submission.
-  ref: 6c78921783546696d77174b906f0fbef1e6c5f05
+  ref: a91b8018c00a9e889f8215e968e42f0c6eb964dc
 
 docs:
   hello_world: |

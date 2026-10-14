@@ -48,7 +48,8 @@
 - [x] Add issue #3 Shanghai regression checks; Debug and Release suites pass 6 files / 1223 assertions.
 - [x] Prepare README, changelog, and the v0.2.0 candidate descriptor.
 - [x] Move local research into ignored `.docs/` and exclude local tool state.
-- [ ] Pass both DuckDB version matrices and the compatibility gate for the final candidate.
-- [ ] Merge through a project PR and pass the same checks on the final `main` commit.
-- [ ] Tag the verified release source and finalize the community descriptor `repo.ref`.
-- [ ] Submit the community update, pass Community CI/review, and verify installation.
+- [x] Pass both DuckDB version matrices and the compatibility gate for the final candidate.
+- [x] Merge through [project PR #7](https://github.com/tshelianthus/duckdb-pintail/pull/7); final `main` commit `a91b8018c00a9e889f8215e968e42f0c6eb964dc` passed the [dual-version workflow and compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/38342840952).
+- [x] Push `v0.2.0` for that verified source and finalize the community descriptor `repo.ref`.
+- [x] Submit [community update PR #3061](https://github.com/duckdb/community-extensions/pull/3061), changing only `extensions/pintail/description.yml`.
+- [ ] Pass Community CI and maintainer review, then verify the distributed installation.

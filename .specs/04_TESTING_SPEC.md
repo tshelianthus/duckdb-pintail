@@ -87,8 +87,10 @@ verification. A current `main` build does not guarantee compatibility with a lat
 stable release.
 
 Extension binaries are specific to the DuckDB version they were compiled against.
-The local descriptor is a v0.2.0 candidate; replace its development reference with
-the final verified `main` commit before community submission.
+The local v0.2.0 descriptor records the verified `main` source
+`a91b8018c00a9e889f8215e968e42f0c6eb964dc`, also tagged `v0.2.0`.
+For subsequent updates, finalize `repo.ref` only after the corresponding `main`
+commit passes both version matrices and the release compatibility gate.
 
 ## Whole-geometry encoding and differential gate
 
