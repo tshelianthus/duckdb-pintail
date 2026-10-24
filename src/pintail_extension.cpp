@@ -128,8 +128,8 @@ static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &inp
 
 static const LogicalType &BoundGeometryType(ExpressionState &state, const Vector &argument) {
 	auto &bound_function = state.expr.Cast<BoundFunctionExpression>();
-	if (bound_function.bind_info) {
-		return bound_function.bind_info->Cast<GeometryGeoHashBindData>().geometry_type;
+	if (bound_function.BindInfo()) {
+		return bound_function.BindInfo()->Cast<GeometryGeoHashBindData>().geometry_type;
 	}
 	return argument.GetType();
 }
