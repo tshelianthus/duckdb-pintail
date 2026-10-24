@@ -7,6 +7,7 @@
 #include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/types/geometry_crs.hpp"
 #include "duckdb/planner/expression.hpp"
+#include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 #include "duckdb/common/vector_operations/binary_executor.hpp"
@@ -101,12 +102,36 @@ inline void GeomFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &s
 
 // Preserve CRS-bearing argument types instead of silently casting away the tag.
 #if PINTAIL_DUCKDB_2
+struct GeometryGeoHashBindData : FunctionData {
+	explicit GeometryGeoHashBindData(LogicalType geometry_type_p) : geometry_type(std::move(geometry_type_p)) {
+	}
+
+	unique_ptr<FunctionData> Copy() const override {
+		return make_uniq<GeometryGeoHashBindData>(geometry_type);
+	}
+	bool Equals(const FunctionData &other) const override {
+		return geometry_type == other.Cast<GeometryGeoHashBindData>().geometry_type;
+	}
+
+	LogicalType geometry_type;
+};
+
 static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &input) {
 	auto &arguments = input.GetArguments();
 	if (arguments[0]->GetReturnType().id() == LogicalTypeId::GEOMETRY) {
-		input.GetBoundFunction().GetArguments()[0] = arguments[0]->GetReturnType();
+		auto geometry_type = arguments[0]->GetReturnType();
+		input.GetBoundFunction().GetArguments()[0] = geometry_type;
+		return make_uniq<GeometryGeoHashBindData>(std::move(geometry_type));
 	}
 	return nullptr;
+}
+
+static const LogicalType &BoundGeometryType(ExpressionState &state, const Vector &argument) {
+	auto &bound_function = state.expr.Cast<BoundFunctionExpression>();
+	if (bound_function.bind_info) {
+		return bound_function.bind_info->Cast<GeometryGeoHashBindData>().geometry_type;
+	}
+	return argument.GetType();
 }
 #else
 static unique_ptr<FunctionData> BindGeometryGeoHash(ClientContext &, ScalarFunction &function,
@@ -156,7 +181,7 @@ inline void GeometryGeoHashFunction(DataChunk &args, ExpressionState &state, Vec
 			validity.SetInvalid(row);
 			continue;
 		}
-		auto encoded = EncodeGeometryGeoHash(result, geometries[input_index], args.data[0].GetType(), 0);
+		auto encoded = EncodeGeometryGeoHash(result, geometries[input_index], BoundGeometryType(state, args.data[0]), 0);
 		if (!encoded) {
 			validity.SetInvalid(row);
 			continue;
@@ -194,7 +219,7 @@ inline void GeometryGeoHashPrecisionFunction(DataChunk &args, ExpressionState &s
 			validity.SetInvalid(row);
 			continue;
 		}
-		auto encoded = EncodeGeometryGeoHash(result, geometries[geometry_index], args.data[0].GetType(),
+		auto encoded = EncodeGeometryGeoHash(result, geometries[geometry_index], BoundGeometryType(state, args.data[0]),
 		                                    precisions[precision_index]);
 		if (!encoded) {
 			validity.SetInvalid(row);
