@@ -17,14 +17,13 @@ WHERE function_name IN (
   'st_box2dfromgeohash',
   'st_geohash_neighbors'
 )
+AND NOT (function_name = 'st_geohash' AND parameters[1] = 'geom')
 ORDER BY function_name, len(parameter_types), parameter_types::VARCHAR;
 ----
 pintail	[arg]	[VARCHAR]
 st_box2dfromgeohash	[hash]	[VARCHAR]
 st_box2dfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
-st_geohash	[geom]	[GEOMETRY]
 st_geohash	[lat, lon]	[DOUBLE, DOUBLE]
-st_geohash	[geom, maxchars]	[GEOMETRY, INTEGER]
 st_geohash	[lat, lon, precision]	[DOUBLE, DOUBLE, INTEGER]
 st_geohash_bbox	[hash]	[VARCHAR]
 st_geohash_bbox	[hash, precision]	[VARCHAR, INTEGER]
@@ -34,12 +33,22 @@ st_geomfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
 st_pointfromgeohash	[hash]	[VARCHAR]
 st_pointfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
 
+# Geometry overloads retain their named parameters and descriptions on DuckDB 2.0,
+# where parameter_types metadata cannot currently materialize GEOMETRY.
+query I
+SELECT count(*) = 2 AND bool_and(description IS NOT NULL AND description <> '')
+FROM duckdb_functions()
+WHERE function_name = 'st_geohash' AND parameters[1] = 'geom';
+----
+true
+
 # Geometry overloads must keep their own description instead of inheriting lat/lon text.
 query T
 SELECT description
 FROM duckdb_functions()
 WHERE function_name = 'st_geohash'
-  AND parameter_types::VARCHAR = '[GEOMETRY]'
+  AND parameters[1] = 'geom'
+  AND len(parameters) = 1
 ----
 Encode the smallest Geohash cell containing a geometry's complete XY extent.
 
@@ -47,7 +56,8 @@ query T
 SELECT description
 FROM duckdb_functions()
 WHERE function_name = 'st_geohash'
-  AND parameter_types::VARCHAR = '[GEOMETRY, INTEGER]'
+  AND parameters[1] = 'geom'
+  AND len(parameters) = 2
 ----
 Encode a geometry extent as a Geohash with an optional maximum character count.
 
