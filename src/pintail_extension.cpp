@@ -13,6 +13,16 @@
 #include "duckdb/common/vector_operations/ternary_executor.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
+#include <optional>
+
+#if __has_include("duckdb/common/vector/struct_vector.hpp")
+#define PINTAIL_DUCKDB_2 1
+#include "duckdb/function/function_set.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/struct_vector.hpp"
+#else
+#define PINTAIL_DUCKDB_2 0
+#endif
 
 namespace duckdb {
 
@@ -89,6 +99,15 @@ inline void GeomFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &s
 }
 
 // Preserve CRS-bearing argument types instead of silently casting away the tag.
+#if PINTAIL_DUCKDB_2
+static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
+	if (arguments[0]->return_type.id() == LogicalTypeId::GEOMETRY) {
+		input.GetBoundFunction().GetArguments()[0] = arguments[0]->return_type;
+	}
+	return nullptr;
+}
+#else
 static unique_ptr<FunctionData> BindGeometryGeoHash(ClientContext &, ScalarFunction &function,
                                                   vector<unique_ptr<Expression>> &arguments) {
 	if (arguments[0]->return_type.id() == LogicalTypeId::GEOMETRY) {
@@ -96,6 +115,7 @@ static unique_ptr<FunctionData> BindGeometryGeoHash(ClientContext &, ScalarFunct
 	}
 	return nullptr;
 }
+#endif
 
 static void ValidateGeoHashCRS(const LogicalType &type) {
 	if (GeoType::HasCRS(type)) {
@@ -106,8 +126,8 @@ static void ValidateGeoHashCRS(const LogicalType &type) {
 	}
 }
 
-static string_t EncodeGeometryGeoHash(Vector &result, const string_t &geometry, const LogicalType &type,
-                                     int32_t maxchars, ValidityMask &validity, idx_t index) {
+static std::optional<string_t> EncodeGeometryGeoHash(Vector &result, const string_t &geometry, const LogicalType &type,
+                                                     int32_t maxchars) {
 	if (maxchars < 0 || maxchars > MAX_GEOHASH_PRECISION) {
 		throw InvalidInputException("Geohash geometry precision out of range: %d (must be within [0, 20])", maxchars);
 	}
@@ -116,26 +136,50 @@ static string_t EncodeGeometryGeoHash(Vector &result, const string_t &geometry, 
 	ValidateGeographicWkb(geometry);
 	auto extent = GeometryExtent::Empty();
 	if (Geometry::GetExtent(geometry, extent) == 0) {
-		validity.SetInvalid(index);
-		return string_t();
+		return std::nullopt;
 	}
 	return StringVector::AddString(result, GeohashEncodeExtent(
 	    {extent.y_min, extent.x_min, extent.y_max, extent.x_max}, maxchars));
 }
 
 inline void GeometryGeoHashFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+#if PINTAIL_DUCKDB_2
+	UnaryExecutor::Execute<string_t, std::optional<string_t>>(
+	    args.data[0], result, args.size(), [&](string_t geometry) -> std::optional<string_t> {
+		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), 0);
+	    });
+#else
 	UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
 	    args.data[0], result, args.size(), [&](string_t geometry, ValidityMask &validity, idx_t index) {
-		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), 0, validity, index);
+		    auto encoded = EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), 0);
+		    if (!encoded) {
+			    validity.SetInvalid(index);
+			    return string_t();
+		    }
+		    return *encoded;
 	    });
+#endif
 }
 
 inline void GeometryGeoHashPrecisionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+#if PINTAIL_DUCKDB_2
+	BinaryExecutor::Execute<string_t, int32_t, std::optional<string_t>>(
+	    args.data[0], args.data[1], result, args.size(),
+	    [&](string_t geometry, int32_t maxchars) -> std::optional<string_t> {
+		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), maxchars);
+	    });
+#else
 	BinaryExecutor::ExecuteWithNulls<string_t, int32_t, string_t>(
 	    args.data[0], args.data[1], result, args.size(),
 	    [&](string_t geometry, int32_t maxchars, ValidityMask &validity, idx_t index) {
-		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), maxchars, validity, index);
+		    auto encoded = EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), maxchars);
+		    if (!encoded) {
+			    validity.SetInvalid(index);
+			    return string_t();
+		    }
+		    return *encoded;
 	    });
+#endif
 }
 
 // STRUCT is a nested type rather than an executor physical scalar. Dispatch via an
@@ -160,6 +204,46 @@ static void ApplyNestedLayout(Vector &result, Vector &indices) {
 
 template <bool HAS_PRECISION>
 static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+#if PINTAIL_DUCKDB_2
+	auto &children = StructVector::GetEntries(result);
+	auto min_lat = FlatVector::GetData<double>(*children[0]);
+	auto min_lon = FlatVector::GetData<double>(*children[1]);
+	auto max_lat = FlatVector::GetData<double>(*children[2]);
+	auto max_lon = FlatVector::GetData<double>(*children[3]);
+	Vector indices {LogicalType(LogicalTypeId::UBIGINT)};
+	UnifiedVectorFormat hash_format;
+	args.data[0].ToUnifiedFormat(args.size(), hash_format);
+	auto hashes = UnifiedVectorFormat::GetData<string_t>(hash_format);
+	UnifiedVectorFormat precision_format;
+	int32_t *precisions = nullptr;
+	if constexpr (HAS_PRECISION) {
+		args.data[1].ToUnifiedFormat(args.size(), precision_format);
+		precisions = UnifiedVectorFormat::GetData<int32_t>(precision_format);
+	}
+	auto &validity = FlatVector::Validity(indices);
+	for (idx_t row = 0; row < args.size(); row++) {
+		const auto hash_index = hash_format.sel->get_index(row);
+		if (!hash_format.validity.RowIsValid(hash_index)) {
+			validity.SetInvalid(row);
+			continue;
+		}
+		int32_t precision = -1;
+		if constexpr (HAS_PRECISION) {
+			const auto precision_index = precision_format.sel->get_index(row);
+			if (!precision_format.validity.RowIsValid(precision_index)) {
+				validity.SetInvalid(row);
+				continue;
+			}
+			precision = precisions[precision_index];
+		}
+		const auto bbox = GeohashDecodeBBox(hashes[hash_index].GetString(), precision);
+		min_lat[row] = bbox.min_lat;
+		min_lon[row] = bbox.min_lon;
+		max_lat[row] = bbox.max_lat;
+		max_lon[row] = bbox.max_lon;
+	}
+	ApplyNestedLayout(result, indices);
+#else
 	auto &children = StructVector::GetEntries(result);
 	auto min_lat = FlatVector::GetData<double>(*children[0]);
 	auto min_lon = FlatVector::GetData<double>(*children[1]);
@@ -184,6 +268,7 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 		    });
 	}
 	ApplyNestedLayout(result, indices);
+#endif
 }
 
 inline void StGeohashNeighborsFun(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -220,15 +305,34 @@ struct DocumentedScalarOverload {
 	vector<string> examples;
 };
 
+static LogicalType DocumentedParameterType(const string &name) {
+	if (name == "lat" || name == "lon") {
+		return LogicalType(LogicalTypeId::DOUBLE);
+	}
+	if (name == "precision" || name == "maxchars") {
+		return LogicalType(LogicalTypeId::INTEGER);
+	}
+	if (name == "geom") {
+		return LogicalType::GEOMETRY();
+	}
+	return LogicalType(LogicalTypeId::VARCHAR);
+}
+
 static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &name,
                                         vector<DocumentedScalarOverload> overloads,
                                         std::initializer_list<const char *> categories = {"geospatial", "geohash"}) {
+#if PINTAIL_DUCKDB_2
+	ScalarFunctionSet set(Identifier(name));
+#else
 	ScalarFunctionSet set(name);
+#endif
 	CreateScalarFunctionInfo info(std::move(set));
 	for (auto &overload : overloads) {
 		FunctionDescription description;
 		description.parameter_names = overload.parameter_names;
-		description.parameter_types = overload.function.arguments;
+		for (auto &parameter_name : overload.parameter_names) {
+			description.parameter_types.push_back(DocumentedParameterType(parameter_name));
+		}
 		description.description = overload.description;
 		description.examples = overload.examples;
 		for (auto category : categories) {
