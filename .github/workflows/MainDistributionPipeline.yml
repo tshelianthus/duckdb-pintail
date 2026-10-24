@@ -38,7 +38,7 @@ jobs:
       duckdb_version: v2.0.0
       ci_tools_version: v2.0-cyanoptera
       extension_name: pintail
-      vcpkg_commit: d54cbbe3df17e8e5ce68312f483b4155836112aa
+      vcpkg_commit: 84bab45d415d22042bd0b9081aea57f362da3f35
       reduced_ci_mode: disabled
       skip_tests: false
 
