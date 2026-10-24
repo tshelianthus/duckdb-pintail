@@ -211,10 +211,10 @@ template <bool HAS_PRECISION>
 static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 #if PINTAIL_DUCKDB_2
 	auto &children = StructVector::GetEntries(result);
-	auto min_lat = FlatVector::GetData<double>(children[0]);
-	auto min_lon = FlatVector::GetData<double>(children[1]);
-	auto max_lat = FlatVector::GetData<double>(children[2]);
-	auto max_lon = FlatVector::GetData<double>(children[3]);
+	auto min_lat = FlatVector::GetDataMutable<double>(children[0]);
+	auto min_lon = FlatVector::GetDataMutable<double>(children[1]);
+	auto max_lat = FlatVector::GetDataMutable<double>(children[2]);
+	auto max_lon = FlatVector::GetDataMutable<double>(children[3]);
 	UnifiedVectorFormat hash_format;
 	args.data[0].ToUnifiedFormat(hash_format);
 	auto hashes = UnifiedVectorFormat::GetData<string_t>(hash_format);
@@ -224,12 +224,12 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 		args.data[1].ToUnifiedFormat(precision_format);
 		precisions = UnifiedVectorFormat::GetData<int32_t>(precision_format);
 	}
-	auto &validity = FlatVector::Validity(result);
+	auto &validity = FlatVector::ValidityMutable(result);
 	for (idx_t row = 0; row < args.size(); row++) {
 		const auto hash_index = hash_format.sel->get_index(row);
 		if (!hash_format.validity.RowIsValid(hash_index)) {
 			validity.SetInvalid(row);
-			for (auto &child : children) FlatVector::Validity(child).SetInvalid(row);
+			for (auto &child : children) FlatVector::ValidityMutable(child).SetInvalid(row);
 			continue;
 		}
 		int32_t precision = -1;
@@ -237,7 +237,7 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 			const auto precision_index = precision_format.sel->get_index(row);
 			if (!precision_format.validity.RowIsValid(precision_index)) {
 				validity.SetInvalid(row);
-				for (auto &child : children) FlatVector::Validity(child).SetInvalid(row);
+				for (auto &child : children) FlatVector::ValidityMutable(child).SetInvalid(row);
 				continue;
 			}
 			precision = precisions[precision_index];
