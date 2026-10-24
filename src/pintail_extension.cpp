@@ -20,6 +20,7 @@
 #include "duckdb/function/function_set.hpp"
 #include "duckdb/common/vector/list_vector.hpp"
 #include "duckdb/common/vector/struct_vector.hpp"
+#include "duckdb/common/vector/string_vector.hpp"
 #else
 #define PINTAIL_DUCKDB_2 0
 #endif
@@ -102,8 +103,8 @@ inline void GeomFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &s
 #if PINTAIL_DUCKDB_2
 static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &input) {
 	auto &arguments = input.GetArguments();
-	if (arguments[0]->return_type.id() == LogicalTypeId::GEOMETRY) {
-		input.GetBoundFunction().GetArguments()[0] = arguments[0]->return_type;
+	if (arguments[0]->GetReturnType().id() == LogicalTypeId::GEOMETRY) {
+		input.GetBoundFunction().GetArguments()[0] = arguments[0]->GetReturnType();
 	}
 	return nullptr;
 }
@@ -198,7 +199,11 @@ static void ApplyNestedLayout(Vector &result, Vector &indices) {
 	};
 	apply(result);
 	for (auto &child : StructVector::GetEntries(result)) {
+#if PINTAIL_DUCKDB_2
+		apply(child);
+#else
 		apply(*child);
+#endif
 	}
 }
 
@@ -206,25 +211,25 @@ template <bool HAS_PRECISION>
 static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 #if PINTAIL_DUCKDB_2
 	auto &children = StructVector::GetEntries(result);
-	auto min_lat = FlatVector::GetData<double>(*children[0]);
-	auto min_lon = FlatVector::GetData<double>(*children[1]);
-	auto max_lat = FlatVector::GetData<double>(*children[2]);
-	auto max_lon = FlatVector::GetData<double>(*children[3]);
-	Vector indices {LogicalType(LogicalTypeId::UBIGINT)};
+	auto min_lat = FlatVector::GetData<double>(children[0]);
+	auto min_lon = FlatVector::GetData<double>(children[1]);
+	auto max_lat = FlatVector::GetData<double>(children[2]);
+	auto max_lon = FlatVector::GetData<double>(children[3]);
 	UnifiedVectorFormat hash_format;
-	args.data[0].ToUnifiedFormat(args.size(), hash_format);
+	args.data[0].ToUnifiedFormat(hash_format);
 	auto hashes = UnifiedVectorFormat::GetData<string_t>(hash_format);
 	UnifiedVectorFormat precision_format;
-	int32_t *precisions = nullptr;
+	const int32_t *precisions = nullptr;
 	if constexpr (HAS_PRECISION) {
-		args.data[1].ToUnifiedFormat(args.size(), precision_format);
+		args.data[1].ToUnifiedFormat(precision_format);
 		precisions = UnifiedVectorFormat::GetData<int32_t>(precision_format);
 	}
-	auto &validity = FlatVector::Validity(indices);
+	auto &validity = FlatVector::Validity(result);
 	for (idx_t row = 0; row < args.size(); row++) {
 		const auto hash_index = hash_format.sel->get_index(row);
 		if (!hash_format.validity.RowIsValid(hash_index)) {
 			validity.SetInvalid(row);
+			for (auto &child : children) FlatVector::Validity(child).SetInvalid(row);
 			continue;
 		}
 		int32_t precision = -1;
@@ -232,6 +237,7 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 			const auto precision_index = precision_format.sel->get_index(row);
 			if (!precision_format.validity.RowIsValid(precision_index)) {
 				validity.SetInvalid(row);
+				for (auto &child : children) FlatVector::Validity(child).SetInvalid(row);
 				continue;
 			}
 			precision = precisions[precision_index];
@@ -242,7 +248,7 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 		max_lat[row] = bbox.max_lat;
 		max_lon[row] = bbox.max_lon;
 	}
-	ApplyNestedLayout(result, indices);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
 #else
 	auto &children = StructVector::GetEntries(result);
 	auto min_lat = FlatVector::GetData<double>(*children[0]);
@@ -322,7 +328,7 @@ static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &n
                                         vector<DocumentedScalarOverload> overloads,
                                         std::initializer_list<const char *> categories = {"geospatial", "geohash"}) {
 #if PINTAIL_DUCKDB_2
-	ScalarFunctionSet set(Identifier(name));
+	ScalarFunctionSet set{Identifier(name)};
 #else
 	ScalarFunctionSet set(name);
 #endif
