@@ -145,10 +145,24 @@ static std::optional<string_t> EncodeGeometryGeoHash(Vector &result, const strin
 
 inline void GeometryGeoHashFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 #if PINTAIL_DUCKDB_2
-	UnaryExecutor::Execute<string_t, std::optional<string_t>>(
-	    args.data[0], result, args.size(), [&](string_t geometry) -> std::optional<string_t> {
-		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), 0);
-	    });
+	UnifiedVectorFormat input;
+	args.data[0].ToUnifiedFormat(input);
+	auto geometries = UnifiedVectorFormat::GetData<string_t>(input);
+	auto output = FlatVector::GetDataMutable<string_t>(result);
+	auto &validity = FlatVector::ValidityMutable(result);
+	for (idx_t row = 0; row < args.size(); row++) {
+		const auto input_index = input.sel->get_index(row);
+		if (!input.validity.RowIsValid(input_index)) {
+			validity.SetInvalid(row);
+			continue;
+		}
+		auto encoded = EncodeGeometryGeoHash(result, geometries[input_index], args.data[0].GetType(), 0);
+		if (!encoded) {
+			validity.SetInvalid(row);
+			continue;
+		}
+		output[row] = *encoded;
+	}
 #else
 	UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
 	    args.data[0], result, args.size(), [&](string_t geometry, ValidityMask &validity, idx_t index) {
@@ -164,11 +178,30 @@ inline void GeometryGeoHashFunction(DataChunk &args, ExpressionState &state, Vec
 
 inline void GeometryGeoHashPrecisionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 #if PINTAIL_DUCKDB_2
-	BinaryExecutor::Execute<string_t, int32_t, std::optional<string_t>>(
-	    args.data[0], args.data[1], result, args.size(),
-	    [&](string_t geometry, int32_t maxchars) -> std::optional<string_t> {
-		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), maxchars);
-	    });
+	UnifiedVectorFormat geometry_input;
+	args.data[0].ToUnifiedFormat(geometry_input);
+	auto geometries = UnifiedVectorFormat::GetData<string_t>(geometry_input);
+	UnifiedVectorFormat precision_input;
+	args.data[1].ToUnifiedFormat(precision_input);
+	auto precisions = UnifiedVectorFormat::GetData<int32_t>(precision_input);
+	auto output = FlatVector::GetDataMutable<string_t>(result);
+	auto &validity = FlatVector::ValidityMutable(result);
+	for (idx_t row = 0; row < args.size(); row++) {
+		const auto geometry_index = geometry_input.sel->get_index(row);
+		const auto precision_index = precision_input.sel->get_index(row);
+		if (!geometry_input.validity.RowIsValid(geometry_index) ||
+		    !precision_input.validity.RowIsValid(precision_index)) {
+			validity.SetInvalid(row);
+			continue;
+		}
+		auto encoded = EncodeGeometryGeoHash(result, geometries[geometry_index], args.data[0].GetType(),
+		                                    precisions[precision_index]);
+		if (!encoded) {
+			validity.SetInvalid(row);
+			continue;
+		}
+		output[row] = *encoded;
+	}
 #else
 	BinaryExecutor::ExecuteWithNulls<string_t, int32_t, string_t>(
 	    args.data[0], args.data[1], result, args.size(),
