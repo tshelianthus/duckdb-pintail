@@ -118,12 +118,12 @@ struct GeometryGeoHashBindData : FunctionData {
 
 static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &input) {
 	auto &arguments = input.GetArguments();
-	if (arguments[0]->GetReturnType().id() == LogicalTypeId::GEOMETRY) {
-		auto geometry_type = arguments[0]->GetReturnType();
-		input.GetBoundFunction().GetArguments()[0] = geometry_type;
-		return make_uniq<GeometryGeoHashBindData>(std::move(geometry_type));
+	auto geometry_type = arguments[0]->GetReturnType();
+	if (geometry_type.id() != LogicalTypeId::GEOMETRY) {
+		throw BinderException("st_geohash geometry overload requires a GEOMETRY argument, got %s", geometry_type);
 	}
-	return nullptr;
+	input.GetBoundFunction().GetArguments()[0] = geometry_type;
+	return make_uniq<GeometryGeoHashBindData>(std::move(geometry_type));
 }
 
 static const LogicalType &BoundGeometryType(ExpressionState &state, const Vector &argument) {
@@ -428,6 +428,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    {"utility"});
 
 	// st_geohash
+	LogicalType geometry_argument_type = LogicalType::GEOMETRY();
+#if PINTAIL_DUCKDB_2
+	// DuckDB 2 casts CRS-tagged GEOMETRY values to this overload's declared
+	// GEOMETRY type before the bind callback. ANY lets the binder retain the
+	// original logical type; BindGeometryGeoHash narrows it back to GEOMETRY.
+	geometry_argument_type = LogicalType(LogicalTypeId::ANY);
+#endif
 	ScalarFunction geohash3("st_geohash", {LogicalType(LogicalTypeId::DOUBLE), LogicalType(LogicalTypeId::DOUBLE),
 	                                    LogicalType(LogicalTypeId::INTEGER)},
 	                        LogicalType(LogicalTypeId::VARCHAR), StGeoHash3Fun);
@@ -436,10 +443,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                        LogicalType(LogicalTypeId::VARCHAR),
 	                        StGeoHash2Fun);
 	geohash2.SetFallible();
-	ScalarFunction geohash_geom("st_geohash", {LogicalType::GEOMETRY()}, LogicalType(LogicalTypeId::VARCHAR),
+	ScalarFunction geohash_geom("st_geohash", {geometry_argument_type}, LogicalType(LogicalTypeId::VARCHAR),
 	                            GeometryGeoHashFunction, BindGeometryGeoHash);
 	geohash_geom.SetFallible();
-	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(),
+	ScalarFunction geohash_geom_prec("st_geohash", {geometry_argument_type,
 	                                                 LogicalType(LogicalTypeId::INTEGER)},
 	                                 LogicalType(LogicalTypeId::VARCHAR), GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
 	geohash_geom_prec.SetFallible();
