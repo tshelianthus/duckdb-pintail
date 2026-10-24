@@ -128,8 +128,9 @@ static unique_ptr<FunctionData> BindGeometryGeoHash(BindScalarFunctionInput &inp
 
 static const LogicalType &BoundGeometryType(ExpressionState &state, const Vector &argument) {
 	auto &bound_function = state.expr.Cast<BoundFunctionExpression>();
-	if (!bound_function.children.empty()) {
-		auto &argument_type = bound_function.children[0]->GetReturnType();
+	auto &arguments = bound_function.GetChildren();
+	if (!arguments.empty()) {
+		auto &argument_type = arguments[0]->GetReturnType();
 		if (GeoType::HasCRS(argument_type)) {
 			return argument_type;
 		}
