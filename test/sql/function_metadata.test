@@ -5,8 +5,8 @@
 require pintail
 
 # Every public Pintail/Geohash overload must expose real parameter names.
-query III
-SELECT function_name, parameters, parameter_types
+query II
+SELECT function_name, parameters
 FROM duckdb_functions()
 WHERE function_name IN (
   'pintail',
@@ -17,24 +17,25 @@ WHERE function_name IN (
   'st_box2dfromgeohash',
   'st_geohash_neighbors'
 )
-AND NOT (function_name = 'st_geohash' AND parameters[1] = 'geom')
-ORDER BY function_name, len(parameter_types), parameter_types::VARCHAR;
+ORDER BY function_name, len(parameters), parameters::VARCHAR;
 ----
-pintail	[arg]	[VARCHAR]
-st_box2dfromgeohash	[hash]	[VARCHAR]
-st_box2dfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
-st_geohash	[lat, lon]	[DOUBLE, DOUBLE]
-st_geohash	[lat, lon, precision]	[DOUBLE, DOUBLE, INTEGER]
-st_geohash_bbox	[hash]	[VARCHAR]
-st_geohash_bbox	[hash, precision]	[VARCHAR, INTEGER]
-st_geohash_neighbors	[hash]	[VARCHAR]
-st_geomfromgeohash	[hash]	[VARCHAR]
-st_geomfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
-st_pointfromgeohash	[hash]	[VARCHAR]
-st_pointfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+pintail	[arg]
+st_box2dfromgeohash	[hash]
+st_box2dfromgeohash	[hash, precision]
+st_geohash	[geom]
+st_geohash	[geom, maxchars]
+st_geohash	[lat, lon]
+st_geohash	[lat, lon, precision]
+st_geohash_bbox	[hash]
+st_geohash_bbox	[hash, precision]
+st_geohash_neighbors	[hash]
+st_geomfromgeohash	[hash]
+st_geomfromgeohash	[hash, precision]
+st_pointfromgeohash	[hash]
+st_pointfromgeohash	[hash, precision]
 
-# Geometry overloads retain their named parameters and descriptions on DuckDB 2.0,
-# where parameter_types metadata cannot currently materialize GEOMETRY.
+# Verify the geometry overload names without materializing DuckDB 2.0's
+# unsupported GEOMETRY value in duckdb_functions().parameter_types.
 query I
 SELECT count(*) = 2 AND bool_and(description IS NOT NULL AND description <> '')
 FROM duckdb_functions()

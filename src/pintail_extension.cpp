@@ -319,14 +319,7 @@ static LogicalType DocumentedParameterType(const string &name) {
 		return LogicalType(LogicalTypeId::INTEGER);
 	}
 	if (name == "geom") {
-#if PINTAIL_DUCKDB_2
-		// DuckDB 2.0 currently fails while materializing GEOMETRY in the
-		// duckdb_functions() parameter_types column (Unsupported type in GetTypeId).
-		// The registered ScalarFunction still carries the real GEOMETRY type.
-		return LogicalType(LogicalTypeId::VARCHAR);
-#else
 		return LogicalType::GEOMETRY();
-#endif
 	}
 	return LogicalType(LogicalTypeId::VARCHAR);
 }
