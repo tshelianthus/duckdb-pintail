@@ -61,10 +61,10 @@ and coordinate transformations.
 
 ## Release Compatibility Gate
 
-The project workflow builds the same source against **DuckDB v1.5.5 and v1.5.6**.
-Both version matrices and `Release compatibility gate` must succeed before community
-submission. Repeat the checks on the final `main` commit after merging; the community
-`repo.ref` must identify that verified release source.
+The project workflow builds the same source against **DuckDB v1.5.5, v1.5.6, and
+v2.0.0**. Both toolchain lines and `Release compatibility gate` must succeed before
+community submission. Repeat the checks on the final `main` commit after merging; the
+community `repo.ref` must identify that verified release source.
 
 Native SQL tests run where supported by the official toolchain. Build-only platform
 jobs, including Wasm, must not be reported as successful SQL test runs. Local Debug
@@ -72,25 +72,42 @@ and Release suites supplement these checks and do not replace the dual-version C
 
 See [community release gates](../docs/community/RELEASE.md) for the procedure.
 
-## Two-Branch Testing (DuckDB Version Releases)
+## Community Build Target Mapping
 
-The project v1.5.5/v1.5.6 matrix uses one source revision. It does not require a
-separate `repo.ref_next`.
-
-If compatibility with an upcoming DuckDB release requires different source, maintain
-separate stable-targeting and next-release branches. Set `repo.ref` to the stable
-source and `repo.ref_next` to the next-release source, using fixed commit hashes.
-The community workflow controls when the next target is built and the reference is
-promoted; inspect the actual upstream jobs rather than assuming both targets ran.
-PR body text such as `test_all_stable` / `test_all_main` is not a substitute for that
-verification. A current `main` build does not guarantee compatibility with a later
-stable release.
+The project compatibility gate runs one source revision against DuckDB v1.5.5,
+v1.5.6, and v2.0.0. The community workflow currently selects DuckDB 2.0 source from
+`repo.ref` and DuckDB 1.5.6 source from `repo.variegata`. If the source must differ
+between those versions, use separately verified fixed commit hashes in those fields.
+Inspect actual upstream jobs rather than assuming both targets ran. PR body text such
+as `test_all_stable` / `test_all_main` is not a substitute for that verification.
 
 Extension binaries are specific to the DuckDB version they were compiled against.
 The local v0.2.0 descriptor records the verified `main` source
 `a91b8018c00a9e889f8215e968e42f0c6eb964dc`, also tagged `v0.2.0`.
 For subsequent updates, finalize `repo.ref` only after the corresponding `main`
 commit passes both version matrices and the release compatibility gate.
+
+## DuckDB 2.0 and 1.5.x Compatibility
+
+DuckDB 2.0.0 was released on 2026-10-21. The project CI now has two gates on the
+same source revision: the 1.5.5/1.5.6 matrix using `extension-ci-tools` branch
+`v1.5-variegata`, and the 2.0.0 job using `extension-ci-tools` branch
+`v2.0-cyanoptera`.
+`Release compatibility gate` requires both jobs to succeed. The 2.0 job must run
+SQL tests (`skip_tests: false`); build-only platform tasks do not count as SQL proof.
+
+Keep the local DuckDB submodule pinned to v1.5.5 for the established development
+baseline. Retain 1.5.5 and 1.5.6 in CI while those releases remain supported; retire
+them only after an explicit support-policy decision and a green replacement gate.
+The extension binaries remain version-locked and must be built separately per target.
+
+The reusable workflow and its versioned 2.0 toolchain move over time. When reviewing CI,
+confirm the run checked out DuckDB v2.0.0 and that applicable native SQLLogicTest jobs
+actually completed. Do not treat build-only platforms or workflow dispatch text as
+test evidence.
+
+Version-locked binaries remain required: a binary built for 1.5.x cannot be loaded
+into DuckDB 2.0, and vice versa.
 
 ## Whole-geometry encoding and differential gate
 
