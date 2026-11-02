@@ -1,12 +1,12 @@
 #include "pintail_extension.hpp"
 #include "pintail_geohash.hpp"
 #include "pintail_wkb.hpp"
+#include "pintail_compat.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/types/geometry_crs.hpp"
-#include "duckdb/planner/expression.hpp"
 #include "duckdb/common/types/vector.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 #include "duckdb/common/vector_operations/binary_executor.hpp"
@@ -15,6 +15,47 @@
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 
 namespace duckdb {
+
+struct PintailUnaryWithNulls {
+	template <class INPUT_TYPE, class RESULT_TYPE, class FUNC>
+	static RESULT_TYPE Operation(INPUT_TYPE input, ValidityMask &mask, idx_t idx, FUNC &fun) {
+		return fun(input, mask, idx);
+	}
+};
+
+struct PintailBinaryWithNulls {
+	template <class FUNC, class OP, class LEFT_TYPE, class RIGHT_TYPE, class RESULT_TYPE>
+	static RESULT_TYPE Operation(FUNC &fun, LEFT_TYPE left, RIGHT_TYPE right, ValidityMask &mask, idx_t idx) {
+		return fun(left, right, mask, idx);
+	}
+
+	static constexpr bool AddsNulls() {
+		return true;
+	}
+};
+
+// Generic execution receives the result mask and row index, and copies input validity so a callback can invalidate
+// extra rows (empty geometries).
+template <class INPUT_TYPE, class RESULT_TYPE, class FUNC>
+static void ExecuteUnaryWithNulls(Vector &input, Vector &result, idx_t count, FUNC fun) {
+	UnaryExecutor::GenericExecute<INPUT_TYPE, RESULT_TYPE, PintailUnaryWithNulls>(input, result, count, fun);
+}
+
+template <class LEFT_TYPE, class RIGHT_TYPE, class RESULT_TYPE, class FUNC>
+static void ExecuteBinaryWithNulls(Vector &left, Vector &right, Vector &result, idx_t count, FUNC fun) {
+	BinaryExecutor::ExecuteWithWrapper<LEFT_TYPE, RIGHT_TYPE, RESULT_TYPE, bool, PintailBinaryWithNulls>(
+	    left, right, result, count, std::move(fun));
+}
+
+static vector<LogicalType> FunctionArgumentTypes(const ScalarFunction &function) {
+	vector<LogicalType> types;
+	auto &parameters = function.GetSignature().GetParameters();
+	types.reserve(parameters.size());
+	for (auto &parameter : parameters) {
+		types.push_back(parameter.GetType());
+	}
+	return types;
+}
 
 // ---------------------------------------------------------------------------
 // Placeholder scalar (kept from Phase 0 as a load-path canary)
@@ -36,7 +77,7 @@ inline void StGeoHash3Fun(DataChunk &args, ExpressionState &state, Vector &resul
 	auto &lon = args.data[1];
 	auto &precision = args.data[2];
 	TernaryExecutor::Execute<double, double, int32_t, string_t>(
-	    lat, lon, precision, result, args.size(), [&](double lat_v, double lon_v, int32_t prec) {
+	    lat, lon, precision, result, [&](double lat_v, double lon_v, int32_t prec) {
 		    return StringVector::AddString(result, GeohashEncode(lat_v, lon_v, prec));
 	    });
 }
@@ -89,12 +130,12 @@ inline void GeomFromGeohashPrecisionFunction(DataChunk &args, ExpressionState &s
 }
 
 // Preserve CRS-bearing argument types instead of silently casting away the tag.
-static unique_ptr<FunctionData> BindGeometryGeoHash(ClientContext &, ScalarFunction &function,
-                                                  vector<unique_ptr<Expression>> &arguments) {
-	if (arguments[0]->return_type.id() == LogicalTypeId::GEOMETRY) {
-		function.arguments[0] = arguments[0]->return_type;
+static void ResolveGeometryGeoHashTypes(ResolveScalarFunctionTypesInput &input) {
+	const auto &argument_type = input.GetArgumentType(0);
+	if (argument_type.id() != LogicalTypeId::GEOMETRY) {
+		return;
 	}
-	return nullptr;
+	input.GetBoundFunction().GetArguments()[0] = argument_type;
 }
 
 static void ValidateGeoHashCRS(const LogicalType &type) {
@@ -124,14 +165,14 @@ static string_t EncodeGeometryGeoHash(Vector &result, const string_t &geometry, 
 }
 
 inline void GeometryGeoHashFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
+	ExecuteUnaryWithNulls<string_t, string_t>(
 	    args.data[0], result, args.size(), [&](string_t geometry, ValidityMask &validity, idx_t index) {
 		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), 0, validity, index);
 	    });
 }
 
 inline void GeometryGeoHashPrecisionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	BinaryExecutor::ExecuteWithNulls<string_t, int32_t, string_t>(
+	ExecuteBinaryWithNulls<string_t, int32_t, string_t>(
 	    args.data[0], args.data[1], result, args.size(),
 	    [&](string_t geometry, int32_t maxchars, ValidityMask &validity, idx_t index) {
 		    return EncodeGeometryGeoHash(result, geometry, args.data[0].GetType(), maxchars, validity, index);
@@ -153,18 +194,15 @@ static void ApplyNestedLayout(Vector &result, Vector &indices) {
 		}
 	};
 	apply(result);
-	for (auto &child : StructVector::GetEntries(result)) {
-		apply(*child);
-	}
+	PintailForEachStructChild(result, apply);
 }
 
 template <bool HAS_PRECISION>
 static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &children = StructVector::GetEntries(result);
-	auto min_lat = FlatVector::GetData<double>(*children[0]);
-	auto min_lon = FlatVector::GetData<double>(*children[1]);
-	auto max_lat = FlatVector::GetData<double>(*children[2]);
-	auto max_lon = FlatVector::GetData<double>(*children[3]);
+	auto min_lat = PintailMutableFlatData<double>(PintailStructChild(result, 0));
+	auto min_lon = PintailMutableFlatData<double>(PintailStructChild(result, 1));
+	auto max_lat = PintailMutableFlatData<double>(PintailStructChild(result, 2));
+	auto max_lon = PintailMutableFlatData<double>(PintailStructChild(result, 3));
 	Vector indices {LogicalType(LogicalTypeId::UBIGINT)};
 	auto emit = [&](string_t hash, int32_t precision, ValidityMask &, idx_t row) -> uint64_t {
 		const auto bbox = GeohashDecodeBBox(hash.GetString(), precision);
@@ -175,10 +213,9 @@ static void GeoHashBBoxFunction(DataChunk &args, ExpressionState &state, Vector 
 		return row;
 	};
 	if constexpr (HAS_PRECISION) {
-		BinaryExecutor::ExecuteWithNulls<string_t, int32_t, uint64_t>(args.data[0], args.data[1], indices,
-		                                                           args.size(), emit);
+		ExecuteBinaryWithNulls<string_t, int32_t, uint64_t>(args.data[0], args.data[1], indices, args.size(), emit);
 	} else {
-		UnaryExecutor::ExecuteWithNulls<string_t, uint64_t>(
+		ExecuteUnaryWithNulls<string_t, uint64_t>(
 		    args.data[0], indices, args.size(), [&](string_t hash, ValidityMask &mask, idx_t row) {
 			    return emit(hash, -1, mask, row);
 		    });
@@ -201,9 +238,8 @@ inline void StGeohashNeighborsFun(DataChunk &args, ExpressionState &state, Vecto
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
-// Core is built as C++11 while the extension is C++17. Constructing from the
-// enum IDs avoids ODR-using Core's static constexpr LogicalType aliases, which
-// causes duplicate definitions when MinGW links the loadable extension.
+// Construct from the enum IDs so we do not ODR-use Core's static constexpr LogicalType
+// aliases. Those aliases become duplicate definitions when MinGW links the loadable extension.
 static LogicalType MakeBBoxStructType() {
 	child_list_t<LogicalType> children;
 	children.emplace_back("min_lat", LogicalType(LogicalTypeId::DOUBLE));
@@ -223,12 +259,16 @@ struct DocumentedScalarOverload {
 static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &name,
                                         vector<DocumentedScalarOverload> overloads,
                                         std::initializer_list<const char *> categories = {"geospatial", "geohash"}) {
-	ScalarFunctionSet set(name);
+	ScalarFunctionSet set {Identifier(name)};
 	CreateScalarFunctionInfo info(std::move(set));
 	for (auto &overload : overloads) {
+		// The vector<LogicalType> constructor names parameters col0, col1, ... Signature names are what SQL sees.
+		for (idx_t i = 0; i < overload.parameter_names.size(); i++) {
+			overload.function.GetSignature().GetParameter(i).SetName(Identifier(overload.parameter_names[i]));
+		}
 		FunctionDescription description;
 		description.parameter_names = overload.parameter_names;
-		description.parameter_types = overload.function.arguments;
+		description.parameter_types = FunctionArgumentTypes(overload.function);
 		description.description = overload.description;
 		description.examples = overload.examples;
 		for (auto category : categories) {
@@ -262,11 +302,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                        StGeoHash2Fun);
 	geohash2.SetFallible();
 	ScalarFunction geohash_geom("st_geohash", {LogicalType::GEOMETRY()}, LogicalType(LogicalTypeId::VARCHAR),
-	                            GeometryGeoHashFunction, BindGeometryGeoHash);
+	                            GeometryGeoHashFunction);
+	geohash_geom.SetResolveTypesCallback(ResolveGeometryGeoHashTypes);
+	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(), LogicalType(LogicalTypeId::INTEGER)},
+	                                 LogicalType(LogicalTypeId::VARCHAR), GeometryGeoHashPrecisionFunction);
+	geohash_geom_prec.SetResolveTypesCallback(ResolveGeometryGeoHashTypes);
 	geohash_geom.SetFallible();
-	ScalarFunction geohash_geom_prec("st_geohash", {LogicalType::GEOMETRY(),
-	                                                 LogicalType(LogicalTypeId::INTEGER)},
-	                                 LogicalType(LogicalTypeId::VARCHAR), GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
 	geohash_geom_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_geohash",
 	                            {{std::move(geohash3),

@@ -8,12 +8,10 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 
-# Override the parent Core standard locally; an existing cache entry may still be 11.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Core stays C++11 and emits strong copies of static constexpr LogicalType members.
-# This extension is C++17, so GCC emits those ODR-used members as STB_GNU_UNIQUE.
+# GCC emits ODR-used static constexpr LogicalType members as STB_GNU_UNIQUE.
 # aarch64 ld then rejects the clash with libduckdb_static. -fno-gnu-unique makes
 # the extension copies weak so they resolve to Core's definition.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND UNIX AND NOT APPLE)

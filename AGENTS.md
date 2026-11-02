@@ -29,11 +29,11 @@ You are an expert systems engineer and spatial database specialist working on `d
 - Build Debug: `make debug`
 - Build Release: `make release`
 - Run SQL Tests: `make test_debug`
-- Test with CLI (optional): `duckdb -unsigned` (only when local CLI version matches the `duckdb` submodule at `v1.5.5`) -> `LOAD './build/debug/extension/pintail/pintail.duckdb_extension';`
+- Test with CLI (optional): `duckdb -unsigned` (only when local CLI version matches the `duckdb` submodule at `v2.0.0`) -> `LOAD './build/debug/extension/pintail/pintail.duckdb_extension';`
 - Load smoke in CI/local: `make test_debug` (runs `test/sql/00_load.test`)
 
 ## 4. DuckDB Releases & Two-Branch Testing
-- Project CI builds the same source against DuckDB **v1.5.5 and v1.5.6**. Both version matrices and `Release compatibility gate` must pass on the final `main` commit before community submission.
+- Project CI builds against DuckDB **v2.0.0**. That version matrix and `Release compatibility gate` must pass on the final `main` commit before community submission.
 - Community testing against an upcoming DuckDB release is controlled by the upstream workflow and descriptor; inspect actual jobs to establish coverage.
 - If the extension is incompatible with both branches at once, maintain **two separate branches** (one for latest stable, one for `main`) and in `docs/community/description.yml`:
   - `repo.ref` = latest commit hash on the stable-targeting branch;

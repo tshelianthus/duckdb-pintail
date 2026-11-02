@@ -61,21 +61,21 @@ and coordinate transformations.
 
 ## Release Compatibility Gate
 
-The project workflow builds the same source against **DuckDB v1.5.5 and v1.5.6**.
-Both version matrices and `Release compatibility gate` must succeed before community
-submission. Repeat the checks on the final `main` commit after merging; the community
-`repo.ref` must identify that verified release source.
+The project workflow builds against **DuckDB v2.0.0**. That version matrix and
+`Release compatibility gate` must succeed before community submission. Repeat the
+checks on the final `main` commit after merging; the community `repo.ref` must
+identify that verified release source.
 
 Native SQL tests run where supported by the official toolchain. Build-only platform
 jobs, including Wasm, must not be reported as successful SQL test runs. Local Debug
-and Release suites supplement these checks and do not replace the dual-version CI.
+and Release suites supplement these checks and do not replace the v2.0.0 CI.
 
 See [community release gates](../docs/community/RELEASE.md) for the procedure.
 
 ## Two-Branch Testing (DuckDB Version Releases)
 
-The project v1.5.5/v1.5.6 matrix uses one source revision. It does not require a
-separate `repo.ref_next`.
+The project v2.0.0 target uses one source revision. It does not require a separate
+`repo.ref_next`.
 
 If compatibility with an upcoming DuckDB release requires different source, maintain
 separate stable-targeting and next-release branches. Set `repo.ref` to the stable
@@ -87,7 +87,7 @@ verification. A current `main` build does not guarantee compatibility with a lat
 stable release.
 
 Extension binaries are specific to the DuckDB version they were compiled against.
-The local descriptor is a v0.2.0 candidate; replace its development reference with
+The local descriptor is a v0.2.1 candidate; replace its development reference with
 the final verified `main` commit before community submission.
 
 ## Whole-geometry encoding and differential gate

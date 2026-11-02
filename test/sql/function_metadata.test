@@ -56,7 +56,7 @@ query IIII
 SELECT
   bool_and(description IS NOT NULL AND description <> '') AS all_described,
   bool_and(len(examples) > 0) AS all_have_examples,
-  bool_and(len(list_filter(parameters, x -> x LIKE 'col%')) = 0) AS no_placeholder_params,
+  bool_and(parameters::VARCHAR NOT LIKE '%col%') AS no_placeholder_params,
   bool_and(len(categories) > 0) AS all_categorized
 FROM duckdb_functions()
 WHERE function_name IN (

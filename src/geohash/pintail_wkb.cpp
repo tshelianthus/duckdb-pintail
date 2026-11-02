@@ -1,4 +1,5 @@
 #include "pintail_wkb.hpp"
+#include "pintail_compat.hpp"
 
 #include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/helper.hpp"

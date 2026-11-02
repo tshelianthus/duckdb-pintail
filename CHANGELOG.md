@@ -3,7 +3,13 @@
 User-facing changes are recorded here. **Unreleased** changes are available from source
 and have not yet been published to the DuckDB Community Extension repository.
 
-## Unreleased — planned v0.2.0
+## Unreleased — planned v0.2.1
+
+### Changed
+
+- Build the v0.2.0 SQL API for DuckDB v2.0.0. The release compatibility gate requires that version matrix.
+
+## v0.2.0
 
 ### Added
 
@@ -26,8 +32,7 @@ and have not yet been published to the DuckDB Community Extension repository.
 
 - Add the Shanghai regression example: coordinate `(31.2304, 121.4737)` and geometry
   `POINT(121.4737 31.2304)` both encode to `wtw3sj` at precision 6 (issue #3).
-- Add CI coverage for DuckDB v1.5.5 and v1.5.6, with both version matrices required
-  by the release compatibility gate.
+- Add CI coverage for DuckDB v1.5.5 and v1.5.6.
 
 ## v0.1.0
 

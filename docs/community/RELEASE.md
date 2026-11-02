@@ -1,13 +1,13 @@
 # Pintail 社区发布门禁与参数
 
-本轮发布必须先完成 DuckDB `v1.5.5` 和 `v1.5.6` 的项目内验证。两组矩阵未全部通过前，禁止创建社区发布 PR（包括草稿）、创建发布 tag 或发布新版。社区 CI 是后续验证，不能替代该门禁。
+本轮发布必须先完成 DuckDB `v2.0.0` 的项目内验证。该矩阵未通过前，禁止创建社区发布 PR（包括草稿）、创建发布 tag 或发布新版。社区 CI 是后续验证，不能替代该门禁。
 
 ## 验证与发布顺序
 
-1. 在项目 PR 中对同一源码运行两个版本的官方跨平台构建矩阵。原生平台按官方工具链支持运行 SQLLogicTest；Wasm 等平台的构建成功不代表执行过 SQL 测试。
-2. 确认两个版本的所有构建任务和适用的 SQL 测试通过，且 `Release compatibility gate` 成功。失败、取消或未完成均不满足门禁。
-3. 经项目 PR 合并到 `main` 后，再确认合并提交的双版本矩阵和兼容性门禁全部成功。发布引用必须是该已验证提交，不能使用不同源码的历史 CI 结果。
-4. 本地完成 `git submodule update --init --recursive`、`make debug`、`make test_debug`、`make release`、`make test_release`，记录测试版本、提交和结果。本地单版本通过不能代替双版本 CI。
+1. 在项目 PR 中对同一源码运行 DuckDB v2.0.0 的官方跨平台构建矩阵。原生平台按官方工具链支持运行 SQLLogicTest；Wasm 等平台的构建成功不代表执行过 SQL 测试。
+2. 确认该版本的所有构建任务和适用的 SQL 测试通过，且 `Release compatibility gate` 成功。失败、取消或未完成均不满足门禁。
+3. 经项目 PR 合并到 `main` 后，再确认合并提交的 v2.0.0 矩阵和兼容性门禁全部成功。发布引用必须是该已验证提交，不能使用不同源码的历史 CI 结果。
+4. 本地完成 `git submodule update --init --recursive`、`make debug`、`make test_debug`、`make release`、`make test_release`，记录测试版本、提交和结果。本地通过不能代替 v2.0.0 CI。
 5. 创建语义化版本 tag，记录完整 commit SHA，更新描述文件版本与 `repo.ref`，再向社区提交只修改 `extensions/pintail/description.yml` 的 PR。
 6. 等待社区构建、测试与维护者审核完成，再确认实际安装分发结果。各 DuckDB 版本使用针对各自版本构建的二进制。
 
@@ -17,12 +17,12 @@
 
 | 参数 | 当前设置 | 含义 |
 | --- | --- | --- |
-| `matrix.include[].duckdb_version` | `v1.5.5`、`v1.5.6` | 同一源码分别针对两个固定 DuckDB 版本编译；本地子模块继续固定为 `v1.5.5` |
-| `strategy.fail-fast` | `false` | 一个版本失败时，另一个版本继续验证；官方被调用工作流内部的平台调度仍由上游控制 |
-| `ci_tools_version` | `v1.5-variegata` | 使用 DuckDB 官方 1.5 系列工具链 |
-| `matrix.include[].vcpkg_commit` | 1.5.5: `cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3`；1.5.6: `84bab45d415d22042bd0b9081aea57f362da3f35` | 与社区对应版本的构建基线一致；Pintail 自身仍无外部运行时依赖 |
+| `matrix.include[].duckdb_version` | `v2.0.0` | 针对固定的 DuckDB 2.0.0 编译；本地子模块同样固定为 `v2.0.0` |
+| `strategy.fail-fast` | `false` | 官方被调用工作流内部的平台调度仍由上游控制 |
+| `ci_tools_version` | `v2.0-cyanoptera` | 使用 DuckDB 官方 2.0 系列工具链 |
+| `matrix.include[].vcpkg_commit` | `cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3` | 与 `v2.0-cyanoptera` 工作流默认基线一致；Pintail 自身仍无外部运行时依赖 |
 | `skip_tests` | `false` | 启用官方工具链提供的适用平台测试；不为仅编译的平台虚报测试结果 |
-| `release-gate.needs` | `duckdb-stable-build` | 汇总两个版本的矩阵，只有总体成功才放行 |
+| `release-gate.needs` | `duckdb-stable-build` | 汇总 v2.0.0 矩阵，只有总体成功才放行 |
 
 上游产物名称与编译缓存键包含 DuckDB 版本及平台，避免混用二进制。更改版本列表时，应同时核实社区当前工具链与 vcpkg 基线。
 
@@ -37,13 +37,13 @@
 | `extension.license` / `maintainers` | `Apache-2.0` / `tshelianthus` |
 | `repo.github` | `tshelianthus/duckdb-pintail` |
 | `repo.ref` | 通过发布门禁的公开、固定完整 commit SHA |
-| `repo.ref_next` | 为 DuckDB 下一版本需要单独适配源码时使用；1.5.5/1.5.6 双版本矩阵无需为此添加该字段 |
+| `repo.ref_next` | 为 DuckDB 下一版本需要单独适配源码时使用；当前 v2.0.0 目标无需添加该字段 |
 | `extension.excluded_platforms` | 可选的分号分隔平台列表；只有明确记录不支持原因时才使用 |
 | `extension.requires_toolchains` | 可选的额外工具链；Pintail 当前不需要 |
 | `docs.hello_world` | 可独立执行的安装、加载和 SQL 示例 |
 | `docs.extended_description` | 功能、参数边界及行为差异说明 |
 
-当前社区预发布工作流要求存在 `ref_next` 才运行下一版本构建，缺失时可能跳过。不能凭 PR 中的 `test_all_stable` / `test_all_main` 文本声称完成双版本测试，应以实际工作流任务为准。
+当前社区预发布工作流要求存在 `ref_next` 才运行下一版本构建，缺失时可能跳过。不能凭 PR 中的 `test_all_stable` / `test_all_main` 文本声称完成测试，应以实际工作流任务为准。
 
 ## SQL 参数与发布措辞
 

@@ -10,24 +10,26 @@ DuckDB Core `GEOMETRY` and do not require DuckDB Spatial, GEOS, PROJ, or PostGIS
 
 ## Release Status
 
-The published community release is **v0.1.0**. This README describes the development
-API, including additions being prepared for the next community release. These additions
-require a source build until that release is published; see the [changelog](CHANGELOG.md).
+The published community descriptor is **v0.2.0**. `INSTALL pintail FROM community`
+downloads the artifact for the DuckDB version you are running. See
+[DuckDB Compatibility](#duckdb-compatibility) and the [changelog](CHANGELOG.md).
 
 The new Geohash support references PostGIS documentation and behavior. Pintail follows its own API
 contract and does not promise full PostGIS compatibility.
 
 ## Installation
 
-Install the currently published community release:
-
 ```sql
 INSTALL pintail FROM community;
 LOAD pintail;
 ```
 
-To use the development API documented here, build the `dev` branch from source as described
-below. Start the matching local CLI with unsigned-extension loading enabled:
+DuckDB downloads the artifact built for the version you are running. The community
+repository does not take a Pintail version. See
+[DuckDB Compatibility](#duckdb-compatibility).
+
+To build the source in this repository, follow [Local Build & Testing](#local-build--testing).
+Start the matching local CLI with unsigned-extension loading enabled:
 
 ```bash
 ./build/release/duckdb -unsigned
@@ -47,7 +49,7 @@ one DuckDB version does not make its binary interchangeable with another version
 Community installation requires only DuckDB. Source builds additionally require:
 
 - A C++17 compiler, CMake >= 3.8, Make, and Git.
-- The pinned submodules; the local DuckDB target is **v1.5.5**.
+- The pinned submodules; the local DuckDB target is **v2.0.0**.
 
 ## Coordinate Order
 
@@ -207,16 +209,24 @@ SELECT st_geohash(31.2304, 121.4737, 6);
 
 ## DuckDB Compatibility
 
-The current development version is tested with **DuckDB v1.5.5 and v1.5.6**.
-The same Pintail SQL API works on both versions, so you can use either version
-without changing your queries.
+A Pintail binary loads only in the DuckDB version it was built for. On a new DuckDB
+release, the community repository rebuilds extensions and publishes them for that
+DuckDB version. `INSTALL pintail FROM community` always requests that artifact. It
+does not accept a Pintail version the way a Python package index does: the repository
+keeps one current artifact per DuckDB version and replaces it on the next rebuild.
+
+The functions in this README are the v0.2.0 API. v0.2.1 builds that API for DuckDB v2.0.0.
+
+| DuckDB | Artifact served for that DuckDB today |
+| --- | --- |
+| v2.0.0 | no Pintail object yet. v0.2.1 is the candidate source; it is submitted after the v2.0.0 release gate. |
+| v1.5.6 | Pintail v0.2.0 |
+| v1.5.5 | Pintail v0.2.0 |
+| before v1.5.5 | none |
 
 Existing `st_geohash(latitude, longitude [, precision])` calls keep their argument
 order and default precision. The new GEOMETRY overloads provide an additional way
 to encode coordinates and geometries.
-
-Use an extension binary built for your DuckDB version. See the
-[changelog](CHANGELOG.md) for changes and supported versions in each release.
 
 ## License
 
