@@ -3,7 +3,7 @@
 User-facing changes are recorded here. **Unreleased** changes are available from source
 and have not yet been published to the DuckDB Community Extension repository.
 
-## Unreleased — planned v0.2.1
+## v0.2.1 — Community release
 
 ### Compatibility
 
@@ -14,8 +14,8 @@ and have not yet been published to the DuckDB Community Extension repository.
 
 - Debug and Release SQLLogicTest suites pass locally on the pinned DuckDB v1.5.5
   submodule (1175 assertions in 5 test cases per configuration).
-- CI run [40117563542](https://github.com/tshelianthus/duckdb-pintail/actions/runs/40117563542)
-  passes all three version matrices, including applicable DuckDB 2.0.0 SQL tests.
+- Final `main` commit `59ff51b7589bbcb611eaa556535087532af76265` passed all three version
+  matrices and the [release compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41586164844).
 
 ## v0.2.0 — Community release
 

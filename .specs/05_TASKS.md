@@ -110,6 +110,10 @@ References: [DuckDB function metadata](https://duckdb.org/docs/current/sql/meta/
       v1.5.5 submodule; both configurations passed 1175 assertions in 5 cases.
 - [x] Update release instructions and compatibility docs to match DuckDB 2.0 GA
       and the effective community descriptor mapping.
-- [ ] Merge the release PR, verify the final `main` compatibility gate, publish the
-      semantic version tag and matching descriptor refs, then submit the Community
-      Extensions PR and verify its build, merge, deployment, and installed package.
+- [x] Merge [project PR #9](https://github.com/tshelianthus/duckdb-pintail/pull/9); final
+      `main` commit `59ff51b7589bbcb611eaa556535087532af76265` passed the
+      [three-version workflow and compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41586164844).
+- [x] Push `v0.2.1` for that verified source and finalize the community descriptor
+      `repo.ref` to the same SHA.
+- [ ] Submit the Community Extensions PR changing only `extensions/pintail/description.yml`,
+      then verify its build, merge, deployment, and installed package.
