@@ -10,7 +10,9 @@ extension:
 
 repo:
   github: tshelianthus/duckdb-pintail
+  # ref builds against DuckDB 2.0; variegata against v1.5.6. Same verified source.
   ref: 59ff51b7589bbcb611eaa556535087532af76265
+  variegata: 59ff51b7589bbcb611eaa556535087532af76265
 
 docs:
   hello_world: |
