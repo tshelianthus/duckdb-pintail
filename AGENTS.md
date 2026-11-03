@@ -33,13 +33,11 @@ You are an expert systems engineer and spatial database specialist working on `d
 - Load smoke in CI/local: `make test_debug` (runs `test/sql/00_load.test`)
 
 ## 4. DuckDB Releases & Two-Branch Testing
-- Project CI builds the same source against DuckDB **v1.5.5 and v1.5.6**. Both version matrices and `Release compatibility gate` must pass on the final `main` commit before community submission.
-- Community testing against an upcoming DuckDB release is controlled by the upstream workflow and descriptor; inspect actual jobs to establish coverage.
-- If the extension is incompatible with both branches at once, maintain **two separate branches** (one for latest stable, one for `main`) and in `docs/community/description.yml`:
-  - `repo.ref` = latest commit hash on the stable-targeting branch;
-  - `repo.ref_next` = commit hash on the `main`-targeting branch.
-  Once the new release ships, `ref_next` is swapped for `ref` automatically.
-- **Version locking**: the binary is bound to the DuckDB version it was compiled against — a `v0.9.2` binary cannot be used with `v0.10.3`.
+- Project CI builds the same source against DuckDB **v1.5.5, v1.5.6, and v2.0.0**. All matrices and `Release compatibility gate` must pass on the final `main` commit before community submission.
+- Keep local development pinned to DuckDB `v1.5.5`; verify additional version compatibility through the actual CI matrices. DuckDB 2.0.0 is released and included in the release gate.
+- Community builds use `repo.ref` for DuckDB 2.0 and `repo.variegata` for DuckDB 1.5.6. `repo.ref_next` does not select the current 2.0 build; inspect actual jobs for coverage.
+- If one source cannot cover both lines, publish independently verified source refs in `repo.ref` and `repo.variegata`.
+- **Version locking**: the binary is bound to the DuckDB version it was compiled against — a `v0.9.2` binary cannot be used with `v0.10.3`, and 1.5.x / 2.0 binaries are not interchangeable.
 - PR body text such as `test_all_stable` / `test_all_main` is not evidence that a matrix ran; require successful workflow jobs.
 - Keep local research in ignored `.docs/`; do not commit `.reasonix/` or `reasonix.toml`.
-- Full spec: `.specs/04_TESTING_SPEC.md`.
+- Full specs: `.specs/04_TESTING_SPEC.md`, Phase 2C in `.specs/05_TASKS.md`.

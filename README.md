@@ -207,9 +207,10 @@ SELECT st_geohash(31.2304, 121.4737, 6);
 
 ## DuckDB Compatibility
 
-The current development version is tested with **DuckDB v1.5.5 and v1.5.6**.
-The same Pintail SQL API works on both versions, so you can use either version
-without changing your queries.
+The current development version is tested with **DuckDB v1.5.5, v1.5.6, and
+v2.0.0**. The same Pintail SQL API works across these versions, so you can use
+any of them without changing your queries. Project CI runs the full build and
+applicable SQL test matrices for all three versions.
 
 Existing `st_geohash(latitude, longitude [, precision])` calls keep their argument
 order and default precision. The new GEOMETRY overloads provide an additional way

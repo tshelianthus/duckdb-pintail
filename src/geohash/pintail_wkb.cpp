@@ -1,4 +1,7 @@
 #include "pintail_wkb.hpp"
+#if __has_include("duckdb/common/vector/string_vector.hpp")
+#include "duckdb/common/vector/string_vector.hpp"
+#endif
 
 #include "duckdb/common/types/geometry.hpp"
 #include "duckdb/common/helper.hpp"
