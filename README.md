@@ -145,12 +145,12 @@ SELECT st_geohash_neighbors('ezs42');
 
 ## Discover Functions from SQL
 
-In development builds, inspect function signatures, descriptions, and examples directly
-from SQL:
+In development builds, inspect function signatures, catalog comments, descriptions, and
+examples directly from SQL. A comment is shared by every overload of a function name.
 
 ```sql
 SELECT function_name, parameters, parameter_types, return_type,
-       description, examples
+       comment, description, examples
 FROM duckdb_functions()
 WHERE function_name = 'st_geohash'
 ORDER BY len(parameter_types), parameter_types::VARCHAR;

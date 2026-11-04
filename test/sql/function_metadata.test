@@ -1,0 +1,115 @@
+# name: test/sql/function_metadata.test
+# description: Verify duckdb_functions() exposes comments, parameter names, descriptions, examples, and categories
+# group: [pintail]
+
+require pintail
+
+# Catalog comments are shared by every overload of a function name.
+query TT
+SELECT function_name, min(comment)
+FROM duckdb_functions()
+WHERE function_name IN (
+  'pintail',
+  'st_geohash',
+  'st_pointfromgeohash',
+  'st_geomfromgeohash',
+  'st_geohash_bbox',
+  'st_box2dfromgeohash',
+  'st_geohash_neighbors'
+)
+GROUP BY function_name
+ORDER BY function_name;
+----
+pintail	Returns a Pintail diagnostic string used to verify that the extension loaded.
+st_box2dfromgeohash	Alias of st_geohash_bbox. Returns the same latitude/longitude STRUCT; DuckDB has no PostgreSQL BOX2D type.
+st_geohash	Encodes a Geohash. Numeric arguments are latitude then longitude; geometry XY is longitude then latitude, and the hash covers the entire extent in at most 20 characters.
+st_geohash_bbox	Decodes a Geohash to a STRUCT bounding box (min_lat, min_lon, max_lat, max_lon). Omitted or negative precision uses the full hash; zero decodes the world cell.
+st_geohash_neighbors	Returns the eight adjacent Geohash cells in [N, NE, E, SE, S, SW, W, NW] order, wrapping at the antimeridian and across the poles.
+st_geomfromgeohash	Returns a Geohash cell boundary as an EPSG:4326 POLYGON (x=longitude, y=latitude).
+st_pointfromgeohash	Returns the center of a Geohash cell as an EPSG:4326 POINT (x=longitude, y=latitude).
+
+# One comment per name, and the existing per-overload documentation stays populated.
+query I
+SELECT count(*) = 14
+  AND count(DISTINCT function_name) = 7
+  AND bool_and(comment IS NOT NULL AND comment <> '')
+  AND bool_and(description IS NOT NULL AND description <> '')
+  AND bool_and(len(examples) > 0)
+  AND bool_and(len(categories) > 0)
+  AND bool_and(len(list_filter(parameters, x -> x LIKE 'col%')) = 0)
+FROM (
+  SELECT function_name, comment, description, examples, categories, parameters
+  FROM duckdb_functions()
+  WHERE function_name IN (
+    'pintail', 'st_geohash', 'st_pointfromgeohash', 'st_geomfromgeohash',
+    'st_geohash_bbox', 'st_box2dfromgeohash', 'st_geohash_neighbors'
+  )
+) documented,
+(
+  SELECT function_name AS commented_name, min(comment) = max(comment) AS one_comment
+  FROM duckdb_functions()
+  WHERE function_name IN (
+    'pintail', 'st_geohash', 'st_pointfromgeohash', 'st_geomfromgeohash',
+    'st_geohash_bbox', 'st_box2dfromgeohash', 'st_geohash_neighbors'
+  )
+  GROUP BY function_name
+) comments
+WHERE function_name = commented_name AND one_comment;
+----
+true
+
+# Named parameters and descriptions for every overload. DuckDB 2 registers the
+# geometry argument as ANY so CRS-tagged GEOMETRY survives bind; DuckDB 1.5
+# registers it as GEOMETRY. Both must keep the documented parameter name.
+query III
+SELECT function_name, parameters, parameter_types
+FROM duckdb_functions()
+WHERE function_name IN (
+  'pintail',
+  'st_pointfromgeohash',
+  'st_geomfromgeohash',
+  'st_geohash_bbox',
+  'st_box2dfromgeohash',
+  'st_geohash_neighbors'
+)
+   OR (function_name = 'st_geohash' AND parameters[1] <> 'geom')
+ORDER BY function_name, len(parameter_types), parameter_types::VARCHAR;
+----
+pintail	[arg]	[VARCHAR]
+st_box2dfromgeohash	[hash]	[VARCHAR]
+st_box2dfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+st_geohash	[lat, lon]	[DOUBLE, DOUBLE]
+st_geohash	[lat, lon, precision]	[DOUBLE, DOUBLE, INTEGER]
+st_geohash_bbox	[hash]	[VARCHAR]
+st_geohash_bbox	[hash, precision]	[VARCHAR, INTEGER]
+st_geohash_neighbors	[hash]	[VARCHAR]
+st_geomfromgeohash	[hash]	[VARCHAR]
+st_geomfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+st_pointfromgeohash	[hash]	[VARCHAR]
+st_pointfromgeohash	[hash, precision]	[VARCHAR, INTEGER]
+
+query IT
+SELECT len(parameters), description
+FROM duckdb_functions()
+WHERE function_name = 'st_geohash' AND parameters[1] = 'geom'
+ORDER BY len(parameters);
+----
+1	Encode the smallest Geohash cell containing a geometry's complete XY extent.
+2	Encode a geometry extent as a Geohash with an optional maximum character count.
+
+query I
+SELECT count(*) = 2
+  AND bool_and(parameter_types[1] IN ('GEOMETRY', 'ANY'))
+  AND bool_and(return_type = 'VARCHAR')
+FROM duckdb_functions()
+WHERE function_name = 'st_geohash' AND parameters[1] = 'geom';
+----
+true
+
+# Decode functions keep an EPSG:4326 GEOMETRY return type in the catalog.
+query I
+SELECT count(*) = 4 AND bool_and(return_type LIKE 'GEOMETRY%')
+FROM duckdb_functions()
+WHERE function_name IN ('st_pointfromgeohash', 'st_geomfromgeohash');
+----
+true

@@ -3,7 +3,21 @@
 User-facing changes are recorded here. **Unreleased** changes are available from source
 and have not yet been published to the DuckDB Community Extension repository.
 
-## Unreleased — planned v0.2.1
+## Unreleased — planned v0.2.2
+
+### Added
+
+- Catalog comments for every Pintail function, shared by that function's overloads and
+  visible in `duckdb_functions().comment`.
+- On DuckDB 2.0, signature parameter names match the documented names (`lat`, `lon`,
+  `geom`, `hash`, and `precision`) so the catalog does not show `col0`.
+
+### Validation
+
+- Debug SQLLogicTest on the pinned DuckDB v1.5.5 submodule passes 1232 assertions in
+  6 test cases, including `test/sql/function_metadata.test`.
+
+## v0.2.1 — Community release
 
 ### Compatibility
 
@@ -14,8 +28,10 @@ and have not yet been published to the DuckDB Community Extension repository.
 
 - Debug and Release SQLLogicTest suites pass locally on the pinned DuckDB v1.5.5
   submodule (1175 assertions in 5 test cases per configuration).
-- CI run [40117563542](https://github.com/tshelianthus/duckdb-pintail/actions/runs/40117563542)
-  passes all three version matrices, including applicable DuckDB 2.0.0 SQL tests.
+- Final `main` commit `59ff51b7589bbcb611eaa556535087532af76265` passed all three version
+  matrices and the [release compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41586164844).
+- Published for DuckDB 2.0 (`repo.ref`) and DuckDB 1.5.6 (`repo.variegata`) through
+  [community PR #3516](https://github.com/duckdb/community-extensions/pull/3516).
 
 ## v0.2.0 — Community release
 
