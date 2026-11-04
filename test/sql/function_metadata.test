@@ -36,7 +36,7 @@ SELECT count(*) = 14
   AND bool_and(description IS NOT NULL AND description <> '')
   AND bool_and(len(examples) > 0)
   AND bool_and(len(categories) > 0)
-  AND bool_and(len(list_filter(parameters, x -> x LIKE 'col%')) = 0)
+  AND bool_and(parameters::VARCHAR NOT LIKE '%col%')
 FROM (
   SELECT function_name, comment, description, examples, categories, parameters
   FROM duckdb_functions()
