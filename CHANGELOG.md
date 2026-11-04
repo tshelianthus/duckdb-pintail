@@ -16,6 +16,9 @@ and have not yet been published to the DuckDB Community Extension repository.
 
 - Debug SQLLogicTest on the pinned DuckDB v1.5.5 submodule passes 1232 assertions in
   6 test cases, including `test/sql/function_metadata.test`.
+- Pull request CI on `0c71d5a` passed the DuckDB v1.5.5, v1.5.6, and v2.0.0 matrices
+  and the release compatibility gate
+  ([run 41792832043](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41792832043)).
 
 ## v0.2.1 — Community release
 
