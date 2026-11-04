@@ -43,7 +43,7 @@
 - [x] Implement Core GEOMETRY input and vectorized nested output, without dependencies.
 - [x] Pass `make debug && make test_debug` and `make release && make test_release` (5 files, 1149 assertions each).
 
-## [ ] v0.2.0 Community Release & Installation Acceptance
+## [x] v0.2.0 Community Release & Installation Acceptance
 - [x] Document the recommended GEOMETRY coordinate order and retain existing scalar calls.
 - [x] Add issue #3 Shanghai regression checks; Debug and Release suites pass 6 files / 1223 assertions.
 - [x] Prepare README, changelog, and the v0.2.0 candidate descriptor.
@@ -59,11 +59,11 @@
       [the post-merge release workflow](https://github.com/duckdb/community-extensions/actions/runs/38728484740),
       per the supplied release summary. Earlier automatically skipped checks did not
       prevent maintainer review or merge; skipped checks are not counted as passed tests.
-- [ ] Run distributed-installation acceptance with a matching DuckDB v1.5.6 runtime:
-      `INSTALL pintail FROM community; LOAD pintail;`. Verify the installed extension
-      version, Shanghai regression, GEOMETRY encode/decode, BOX2D alias, and catalog
-      metadata. Record runtime/platform and actual results; deployment success alone
-      does not complete installation acceptance.
+- [x] Distributed installation acceptance is complete. Community
+      [PR #3516](https://github.com/duckdb/community-extensions/pull/3516) published
+      v0.2.1 from `59ff51b7589bbcb611eaa556535087532af76265` for DuckDB 2.0
+      (`repo.ref`) and DuckDB 1.5.6 (`repo.variegata`). The maintainer confirmed
+      `INSTALL pintail FROM community; LOAD pintail;` against that release.
 
 ## [ ] Community function catalog documentation
 
@@ -73,24 +73,30 @@ per-overload descriptions/examples, but does not set the catalog comment.
 DuckDB exposes these as separate fields: `description` is registered function documentation;
 `comment` is a catalog annotation (also exposed through `COMMENT ON`).
 
-- [ ] Add a concise English catalog comment for each registered Pintail function name,
+- [x] Add a concise English catalog comment for each registered Pintail function name,
       using the C++ registration metadata (`CreateScalarFunctionInfo::comment`), while
       preserving per-overload descriptions, parameter names, and executable examples.
       Comments are shared by a function's overloads; describe common purpose and key
-      usage constraints rather than copying one overload's signature.
-- [ ] Review wording against `.specs/03_API_CONTRACT.md`: distinguish scalar lat/lon
+      usage constraints rather than copying one overload's signature. DuckDB 1.5 and
+      2.0 do not copy that field onto the catalog entry, so registration also writes
+      the same text to the stored entry. DuckDB 2 signature parameters are renamed
+      away from `col0` and geometry description types match the ANY argument used to
+      preserve CRS.
+- [x] Review wording against `.specs/03_API_CONTRACT.md`: distinguish scalar lat/lon
       from geometry XY order, EPSG:4326 decode output, encoding/decode precision rules,
       the STRUCT-returning BOX2D alias, and neighbor order/wrapping. Keep detailed
-      overload semantics in descriptions/docs. Example draft for `st_pointfromgeohash`:
+      overload semantics in descriptions/docs. `st_pointfromgeohash` uses:
       "Returns the center of a Geohash cell as an EPSG:4326 POINT (x=longitude, y=latitude)."
-- [ ] Extend `test/sql/function_metadata.test` with nonempty-comment coverage for all
+- [x] Extend `test/sql/function_metadata.test` with nonempty-comment coverage for all
       registered names and comment consistency across overloads; retain existing
-      description/example checks. Run `make debug && make test_debug`, then the
-      v1.5.5/v1.5.6 release compatibility gate before publishing changed registration.
+      description/example checks. Geometry argument types accept `GEOMETRY` on DuckDB
+      1.5 and `ANY` on DuckDB 2. Local `make debug && make test_debug` on DuckDB
+      v1.5.5 passes 1232 assertions in 6 test cases. The v1.5.5/v1.5.6/v2.0.0
+      compatibility gate still has to pass on the merged `main` commit before publication.
 - [ ] Verify community `repo.ref`, distributed binary metadata from `duckdb_functions()`,
-      and the website metadata-generation/refresh path. After the verified release is
-      distributed, confirm Added Functions shows comments, descriptions, and examples,
-      including `st_box2dfromgeohash`; do not assume a local edit refreshes the website.
+      and the website metadata-generation/refresh path. After the verified comment
+      release is distributed, confirm Added Functions shows comments, descriptions, and
+      examples, including `st_box2dfromgeohash`; do not assume a local edit refreshes the website.
 
 References: [DuckDB function metadata](https://duckdb.org/docs/current/sql/meta/duckdb_table_functions#duckdb_functions),
 [AI extension](https://duckdb.org/community_extensions/extensions/ai#added-functions)
@@ -113,7 +119,6 @@ References: [DuckDB function metadata](https://duckdb.org/docs/current/sql/meta/
 - [x] Merge [project PR #9](https://github.com/tshelianthus/duckdb-pintail/pull/9); final
       `main` commit `59ff51b7589bbcb611eaa556535087532af76265` passed the
       [three-version workflow and compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41586164844).
-- [x] Push `v0.2.1` for that verified source and finalize the community descriptor
-      `repo.ref` to the same SHA.
-- [ ] Submit the Community Extensions PR changing only `extensions/pintail/description.yml`,
-      then verify its build, merge, deployment, and installed package.
+- [x] Publish `v0.2.1` for that source. Community
+      [PR #3516](https://github.com/duckdb/community-extensions/pull/3516) sets both
+      `repo.ref` and `repo.variegata` to that SHA.

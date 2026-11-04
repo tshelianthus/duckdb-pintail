@@ -13,6 +13,7 @@
 #include "duckdb/common/vector_operations/binary_executor.hpp"
 #include "duckdb/common/vector_operations/ternary_executor.hpp"
 #include "duckdb/function/scalar_function.hpp"
+#include "duckdb/catalog/catalog_entry/scalar_function_catalog_entry.hpp"
 #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
 #include <optional>
 
@@ -384,12 +385,30 @@ static LogicalType DocumentedParameterType(const string &name) {
 		return LogicalType(LogicalTypeId::INTEGER);
 	}
 	if (name == "geom") {
+#if PINTAIL_DUCKDB_2
+		// The geometry overload is registered as ANY so DuckDB 2 keeps a CRS-tagged
+		// GEOMETRY through bind. Description types have to match that signature, or
+		// duckdb_functions() drops the overload's description and examples.
+		return LogicalType(LogicalTypeId::ANY);
+#else
 		return LogicalType::GEOMETRY();
+#endif
 	}
 	return LogicalType(LogicalTypeId::VARCHAR);
 }
 
-static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &name,
+// DuckDB 1.5 and 2.0 copy descriptions onto FunctionEntry, but neither copies
+// CreateInfo::comment. duckdb_functions().comment reads the catalog entry.
+static void PublishCatalogComment(ExtensionLoader &loader, const string &name, const char *catalog_comment) {
+#if PINTAIL_DUCKDB_2
+	auto &entry = loader.GetFunction(Identifier(name));
+#else
+	auto &entry = loader.GetFunction(name);
+#endif
+	entry.comment = Value(catalog_comment);
+}
+
+static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &name, const char *catalog_comment,
                                         vector<DocumentedScalarOverload> overloads,
                                         std::initializer_list<const char *> categories = {"geospatial", "geohash"}) {
 #if PINTAIL_DUCKDB_2
@@ -398,7 +417,19 @@ static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &n
 	ScalarFunctionSet set(name);
 #endif
 	CreateScalarFunctionInfo info(std::move(set));
+	info.comment = Value(catalog_comment);
 	for (auto &overload : overloads) {
+#if PINTAIL_DUCKDB_2
+		// DuckDB 2 names signature parameters col0, col1, ... and prefers those
+		// names over FunctionDescription when the counts match.
+		auto &signature = overload.function.GetSignature();
+		if (signature.GetParameterCount() != overload.parameter_names.size()) {
+			throw InternalException("Pintail function %s parameter name count does not match its signature", name);
+		}
+		for (idx_t i = 0; i < overload.parameter_names.size(); i++) {
+			signature.GetParameter(i).SetName(Identifier(overload.parameter_names[i]));
+		}
+#endif
 		FunctionDescription description;
 		description.parameter_names = overload.parameter_names;
 		for (auto &parameter_name : overload.parameter_names) {
@@ -414,12 +445,14 @@ static void RegisterDocumentedScalarSet(ExtensionLoader &loader, const string &n
 	}
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
 	loader.RegisterFunction(std::move(info));
+	PublishCatalogComment(loader, name, catalog_comment);
 }
 
 static void LoadInternal(ExtensionLoader &loader) {
 	// Phase 0 canary
 	RegisterDocumentedScalarSet(
 	    loader, "pintail",
+	    "Returns a Pintail diagnostic string used to verify that the extension loaded.",
 	    {{ScalarFunction("pintail", {LogicalType(LogicalTypeId::VARCHAR)},
 	                     LogicalType(LogicalTypeId::VARCHAR), PintailScalarFun),
 	      {"arg"},
@@ -451,6 +484,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                                 LogicalType(LogicalTypeId::VARCHAR), GeometryGeoHashPrecisionFunction, BindGeometryGeoHash);
 	geohash_geom_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_geohash",
+	                            "Encodes a Geohash. Numeric arguments are latitude then longitude; geometry XY is "
+	                            "longitude then latitude, and the hash covers the entire extent in at most 20 characters.",
 	                            {{std::move(geohash3),
 	                              {"lat", "lon", "precision"},
 	                              "Encode latitude and longitude as a standard Geohash Base32 string.",
@@ -477,6 +512,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                                       Geometry4326(), PointFromGeohashPrecisionFunction);
 	point_from_geohash_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_pointfromgeohash",
+	                            "Returns the center of a Geohash cell as an EPSG:4326 POINT (x=longitude, y=latitude).",
 	                            {{std::move(point_from_geohash),
 	                              {"hash"},
 	                              "Decode a Geohash to the center point of its cell.",
@@ -495,6 +531,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                                      Geometry4326(), GeomFromGeohashPrecisionFunction);
 	geom_from_geohash_prec.SetFallible();
 	RegisterDocumentedScalarSet(loader, "st_geomfromgeohash",
+	                            "Returns a Geohash cell boundary as an EPSG:4326 POLYGON (x=longitude, y=latitude).",
 	                            {{std::move(geom_from_geohash),
 	                              {"hash"},
 	                              "Decode a Geohash to the polygon boundary of its cell.",
@@ -516,6 +553,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 		bbox_prec.SetFallible();
 		RegisterDocumentedScalarSet(
 		    loader, name,
+		    is_box2d_alias ? "Alias of st_geohash_bbox. Returns the same latitude/longitude STRUCT; DuckDB has no "
+		                     "PostgreSQL BOX2D type."
+		                   : "Decodes a Geohash to a STRUCT bounding box (min_lat, min_lon, max_lat, max_lon). "
+		                     "Omitted or negative precision uses the full hash; zero decodes the world cell.",
 		    {{std::move(bbox),
 		      {"hash"},
 		      is_box2d_alias ? "Decode a Geohash to a BOX2D-compatible latitude/longitude bounding box."
@@ -534,6 +575,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	geohash_neighbors.SetFallible();
 	RegisterDocumentedScalarSet(
 	    loader, "st_geohash_neighbors",
+	    "Returns the eight adjacent Geohash cells in [N, NE, E, SE, S, SW, W, NW] order, wrapping at the "
+	    "antimeridian and across the poles.",
 	    {{std::move(geohash_neighbors),
 	      {"hash"},
 	      "Return the eight adjacent Geohash cells in [N, NE, E, SE, S, SW, W, NW] order.",

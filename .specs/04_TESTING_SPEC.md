@@ -82,8 +82,9 @@ Inspect actual upstream jobs rather than assuming both targets ran. PR body text
 as `test_all_stable` / `test_all_main` is not a substitute for that verification.
 
 Extension binaries are specific to the DuckDB version they were compiled against.
-The local v0.2.0 descriptor records the verified `main` source
-`a91b8018c00a9e889f8215e968e42f0c6eb964dc`, also tagged `v0.2.0`.
+The published v0.2.1 descriptor records the verified `main` source
+`59ff51b7589bbcb611eaa556535087532af76265` in both `repo.ref` (DuckDB 2.0) and
+`repo.variegata` (DuckDB 1.5.6). v0.2.0 remains `a91b8018c00a9e889f8215e968e42f0c6eb964dc`.
 For subsequent updates, finalize `repo.ref` only after the corresponding `main`
 commit passes both version matrices and the release compatibility gate.
 
