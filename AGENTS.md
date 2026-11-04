@@ -41,3 +41,22 @@ You are an expert systems engineer and spatial database specialist working on `d
 - PR body text such as `test_all_stable` / `test_all_main` is not evidence that a matrix ran; require successful workflow jobs.
 - Keep local research in ignored `.docs/`; do not commit `.reasonix/` or `reasonix.toml`.
 - Full specs: `.specs/04_TESTING_SPEC.md`, Phase 2C in `.specs/05_TASKS.md`.
+
+## 5. Cursor Cloud specific instructions
+
+The default image points `/usr/bin/c++` at Clang, and that Clang cannot link `libstdc++`. Before `make debug`, select GCC:
+
+```bash
+sudo update-alternatives --set cc /usr/bin/gcc
+sudo update-alternatives --set c++ /usr/bin/g++
+```
+
+DuckDB unity translation units are large. When `MemTotal` is under 24 GB, export `CMAKE_BUILD_PARALLEL_LEVEL=2` before `make debug`.
+
+Load the extension with the CLI this build produces, `./build/debug/duckdb -unsigned`, which matches the pinned DuckDB v1.5.5 submodule:
+
+```sql
+LOAD './build/debug/extension/pintail/pintail.duckdb_extension';
+```
+
+The authoritative check remains `make debug && make test_debug`.
