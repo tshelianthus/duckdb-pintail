@@ -3,7 +3,7 @@
 User-facing changes are recorded here. **Unreleased** changes are available from source
 and have not yet been published to the DuckDB Community Extension repository.
 
-## Unreleased — planned v0.2.2
+## v0.2.2
 
 ### Added
 
@@ -19,6 +19,15 @@ and have not yet been published to the DuckDB Community Extension repository.
 - Pull request CI on `0c71d5a` passed the DuckDB v1.5.5, v1.5.6, and v2.0.0 matrices
   and the release compatibility gate
   ([run 41792832043](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41792832043)).
+- The `dev` to `main` pull request
+  ([run 41818629175](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41818629175))
+  and the merged `main` commit `68e623652724c942d1603fcda5a66d44bdf6d0a7`
+  ([run 41820707428](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41820707428))
+  passed the same three matrices and the release compatibility gate. On that `main`
+  run, v1.5.5 linux_amd64 reported 1232 assertions in 6 test cases, and v2.0.0
+  linux_amd64 reported 6 tests passed.
+- Tagged `v0.2.2` at that `main` commit. `docs/community/description.yml` points
+  `repo.ref` and `repo.variegata` at the same SHA.
 
 ## v0.2.1 — Community release
 

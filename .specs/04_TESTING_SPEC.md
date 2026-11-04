@@ -82,9 +82,14 @@ Inspect actual upstream jobs rather than assuming both targets ran. PR body text
 as `test_all_stable` / `test_all_main` is not a substitute for that verification.
 
 Extension binaries are specific to the DuckDB version they were compiled against.
-The published v0.2.1 descriptor records the verified `main` source
-`59ff51b7589bbcb611eaa556535087532af76265` in both `repo.ref` (DuckDB 2.0) and
-`repo.variegata` (DuckDB 1.5.6). v0.2.0 remains `a91b8018c00a9e889f8215e968e42f0c6eb964dc`.
+The v0.2.2 release source is `68e623652724c942d1603fcda5a66d44bdf6d0a7`. That
+`main` commit passed the v1.5.5, v1.5.6, and v2.0.0 matrices and the release
+compatibility gate in
+[run 41820707428](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41820707428).
+`docs/community/description.yml` records that SHA in both `repo.ref` (DuckDB 2.0)
+and `repo.variegata` (DuckDB 1.5.6). v0.2.1 remains
+`59ff51b7589bbcb611eaa556535087532af76265`. v0.2.0 remains
+`a91b8018c00a9e889f8215e968e42f0c6eb964dc`.
 For subsequent updates, finalize `repo.ref` only after the corresponding `main`
 commit passes both version matrices and the release compatibility gate.
 

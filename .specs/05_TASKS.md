@@ -91,8 +91,14 @@ DuckDB exposes these as separate fields: `description` is registered function do
       registered names and comment consistency across overloads; retain existing
       description/example checks. Geometry argument types accept `GEOMETRY` on DuckDB
       1.5 and `ANY` on DuckDB 2. Local `make debug && make test_debug` on DuckDB
-      v1.5.5 passes 1232 assertions in 6 test cases. The v1.5.5/v1.5.6/v2.0.0
-      compatibility gate still has to pass on the merged `main` commit before publication.
+      v1.5.5 passes 1232 assertions in 6 test cases.
+- [x] Merge [project PR #13](https://github.com/tshelianthus/duckdb-pintail/pull/13).
+      Final `main` commit `68e623652724c942d1603fcda5a66d44bdf6d0a7` passed the
+      v1.5.5, v1.5.6, and v2.0.0 matrices and the
+      [release compatibility gate](https://github.com/tshelianthus/duckdb-pintail/actions/runs/41820707428).
+      On that run, v1.5.5 linux_amd64 reported 1232 assertions in 6 test cases, and
+      v2.0.0 linux_amd64 reported 6 tests passed. Tag `v0.2.2` points at that commit.
+      `docs/community/description.yml` sets `repo.ref` and `repo.variegata` to the same SHA.
 - [ ] Verify community `repo.ref`, distributed binary metadata from `duckdb_functions()`,
       and the website metadata-generation/refresh path. After the verified comment
       release is distributed, confirm Added Functions shows comments, descriptions, and
